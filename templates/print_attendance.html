@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Attendance Report</title>
+
+    <style>
+        :root {
+            --navy: #1b2a4a;
+            --orange: #e87722;
+            --muted: #6b7690;
+            --line: #dfe3ec;
+            --green: #16a34a;
+            --light-gray: #F3F4F6;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #e6e8ec;
+            color: var(--navy);
+            font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+            font-size: 12px;
+        }
+
+        /* ---------- Toolbar (screen only) ---------- */
+        .toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: #fff;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 20px;
+        }
+
+        .filters-text {
+            color: var(--muted);
+            flex: 1;
+        }
+
+        .btn-print {
+            background: var(--orange);
+            color: #fff;
+            border: 0;
+            border-radius: 6px;
+            padding: 8px 18px;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-print:focus-visible {
+            outline: 2px solid var(--navy);
+            outline-offset: 2px;
+        }
+
+        /* ---------- Back Button ---------- */
+
+        .btn-back {
+            background: var(--light-gray);
+            color: #000080;
+            border: 0;
+            border-radius: 6px;
+            padding: 8px 18px;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+
+        }
+
+        /* ---------- Report (fluid - fills whatever paper size prints) ---------- */
+        .page {
+            width: 100%;
+            max-width: 900px;
+            /* just a comfortable on-screen preview width */
+            margin: 24px auto 48px;
+            background: #fff;
+            padding: 40px 44px;
+            box-shadow: 0 2px 14px rgba(27, 42, 74, .18);
+        }
+
+        .rpt-head {
+            display: flex;
+            justify-content: space-between;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--navy);
+            gap: 30px;
+        }
+
+        .header {
+            display: block;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .header h1, h3 {
+            text-align: center;
+        }
+
+        .header h3{
+            color: var(--orange);
+        }
+        .title {
+            text-align: center;
+        }
+
+        .rpt-head h1 {
+            margin: 2px 0 0;
+            font-size: 20px;
+        }
+
+
+
+        .rpt-head strong {
+            color: var(--navy);
+            font-size: 15px;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin: 18px 0;
+        }
+
+        .card {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 10px 14px;
+            background: #f8f9fc;
+        }
+
+        .card .label {
+            color: var(--muted);
+            font-size: 10.5px;
+        }
+
+        .card .value {
+            font-size: 24px;
+            font-weight: 800;
+            margin-top: 2px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 14px;
+        }
+
+        /* Repeats the column headers on every printed page automatically -
+           no manual page-splitting needed for this. */
+        thead {
+            display: table-header-group;
+        }
+
+        th {
+            text-align: left;
+            font-size: 10.5px;
+            padding: 7px 6px;
+            border-bottom: 2px solid var(--navy);
+        }
+
+        td {
+            padding: 8px 6px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        td.muted {
+            color: var(--muted);
+        }
+
+        .st-completed {
+            color: var(--green);
+            font-weight: 700;
+        }
+
+        .st-no_show {
+            color: var(--orange);
+            font-weight: 700;
+        }
+
+        /* A row is never cut in half across a page break, whatever the
+           paper size ends up being. */
+        tr {
+            break-inside: avoid;
+        }
+
+        .empty {
+            text-align: center;
+            color: var(--muted);
+            padding: 28px 0;
+        }
+
+        .signatures {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 56px;
+            break-inside: avoid;
+        }
+
+        .sign {
+            min-width: 200px;
+        }
+
+        .sign .role {
+            color: var(--muted);
+            font-size: 10.5px;
+            margin-bottom: 30px;
+        }
+
+        .sign .name {
+            display: inline-block;
+            border-bottom: 1px solid var(--navy);
+            font-weight: 700;
+            padding-bottom: 2px;
+            min-width: 200px;
+        }
+
+        .sign .title {
+            color: var(--muted);
+            font-size: 10.5px;
+            margin-top: 3px;
+        }
+
+        .logo {
+            width: 320px;
+            /* Set your desired uniform width */
+            height: 100px;
+            /* Set your desired uniform height */
+            display: flex;
+        }
+
+        .logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .attendance-report {
+            display: flex;
+            justify-content: end;
+            font-size: 13px;
+            color: var(--navy);
+        }
+
+        /* ---------- Print ---------- */
+        @media print {
+
+            /*
+                No `size:` here on purpose - leaving it out means the
+                browser uses whatever paper the user picks in their own
+                print dialog (Letter/A4/Legal/etc). Only the margin is ours.
+            */
+            @page {
+                margin: 12mm;
+            }
+
+            body {
+                background: #fff;
+            }
+
+            .toolbar {
+                display: none;
+            }
+
+            /* .page becomes fluid for print: it fills the @page box the
+               browser is already sizing to the chosen paper, instead of
+               staying pinned to a fixed on-screen preview width. */
+            .page {
+                width: auto;
+                max-width: none;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+
+            * {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Toolbar: screen only, hidden automatically when printing -->
+    <div class="toolbar">
+        <div class="filters-text">{{ filters_text }} ({{ total_rows }} record{{ '' if total_rows == 1 else 's' }})
+        </div>
+        <form action="/attendance" method="get">
+            <button type="submit" class="btn-back">Return to Attendance</button>
+        </form>
+        <button type="button" class="btn-print" onclick="window.print()">Print</button>
+    </div>
+
+    <!-- One continuous report. When printed, the browser breaks it across
+         as many physical pages as the chosen paper size needs - Ctrl+P (or
+         this Print button) opens the browser's own dialog, where paper
+         size and page range are already built in. -->
+    <div class="page">
+        <header class="rpt-head">
+            <div class="logo">
+                <img src="../static/logos/barangay_4_logo.png" alt="Barangay 4 Logo">
+            </div>
+            <div class="header">
+                <h3>REPUBLIC OF THE PHILIPPINES</h3>
+                <h1>{{ barangay_name|upper }}</h1>
+            </div>
+            <div class="logo">
+                <img src="../static/logos/san _mateo.png" alt="San Mateo Logo">
+                <img src="../static/logos/bagong_pilipinas logo.png" alt="Bagong Pilipinas Logo">
+            </div>
+        </header>
+
+        <div class="title">
+            <h1>ATTENDANCE REPORT</h1>
+        </div>
+        <div class="cards">
+            <div class="card">
+                <div class="label">TOTAL ISSUED TICKETS</div>
+                <div class="value">{{ stats.issued }}</div>
+            </div>
+            <div class="card">
+                <div class="label">COMPLETED</div>
+                <div class="value">{{ stats.completed }}</div>
+            </div>
+            <div class="card">
+                <div class="label">NO-SHOW</div>
+                <div class="value">{{ stats.no_show }}</div>
+            </div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>No.</th>
+                    <th>Ticket#</th>
+                    <th>Client Name</th>
+                    <th>Type</th>
+                    <th>Service</th>
+                    <th>Time In</th>
+                    <th>Time Out</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in rows %}
+                <tr>
+                    <td class="muted">{{ loop.index }}</td>
+                    <td><strong>{{ v.ticket_number }}</strong></td>
+                    <td><strong>{{ v.citizen_name }}</strong></td>
+                    <td class="muted">{% if v.lane == "P" %}Priority{% else %}Regular{% endif %}</td>
+                    <td class="muted">{{ v.service_label }}</td>
+                    <td class="muted">{{ v.called_at.strftime('%I:%M %p') if v.called_at else '--' }}</td>
+                    <td class="muted">{{ v.completed_at.strftime('%I:%M %p') if v.completed_at else '--' }}</td>
+                    <td class="st-{{ v.final_status }}">
+                        {{ 'No-Show' if v.final_status == 'no_show' else 'Completed' }}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="empty">No records match these filters.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="attendance-report">
+            <br>
+            Date range: {{ range_text }}<br>
+            Generated: {{ generated_at }}
+        </div>
+
+        <div class="signatures">
+            <div class="sign">
+                <div class="role">Prepared by:</div>
+                <div class="name">&nbsp;</div>
+                <div class="title">Barangay Secretary</div>
+            </div>
+            <div class="sign">
+                <div class="role">Noted by:</div>
+                <div class="name">&nbsp;</div>
+                <div class="title">Barangay Captain</div>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>

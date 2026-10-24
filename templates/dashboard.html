@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, badge %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block description %}To display the tickets results{% endblock %}
+{% block page_subtitle %}Overview for today{% endblock %}
+
+{% block content %}
+<!--PERFORMANCE SNAPSHOT-->
+<section>
+    <div class="section-head">
+        <h2>Performance Snapshot</h2>
+        <span class="chip">{{ icon('calendar', 18) }} {{ today_label }}</span>
+    </div>
+
+    <div class="stat-grid">
+        <article class="stat-card">
+            <div class="stat-top"><span class="label">Tickets issued today</span><span class="stat-icon stat-orange">{{ icon('file-chart', 22) }}</span></div>
+            <p class="stat-number">{{ total_count }}</p>
+        </article>
+        <article class="stat-card">
+            <div class="stat-top"><span class="label">Waiting</span><span class="stat-icon stat-slate">{{ icon('user', 22) }}</span></div>
+            <p class="stat-number">{{ waiting_count }}</p>
+        </article>
+        <article class="stat-card">
+            <div class="stat-top"><span class="label">Completed</span><span class="stat-icon stat-green">{{ icon('check', 22) }}</span></div>
+            <p class="stat-number">{{ completed_count }}</p>
+        </article>
+        <article class="stat-card">
+            <div class="stat-top"><span class="label">No-show</span><span class="stat-icon stat-red">{{ icon('user-x', 22) }}</span></div>
+            <p class="stat-number">{{ no_show_count }}</p>
+        </article>
+    </div>
+</section>
+
+<div class="dash-grid">
+    <!--LIVE ACTIVITY-->
+    <section class="card">
+        <h2 class="card-title">Live Queue Overview</h2>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ticket</th>
+                        <th>Client name</th>
+                        <th>Service requested</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in overview %}
+                    <tr>
+                        <td class="cell-primary">{{ row.ticket_number }}</td>
+                        <td class="cell-primary">{{ row.citizen_name }}</td>
+                        <td>{{ row.service_name }}</td>
+                        <td>{{ badge(row.status) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="empty-row">No activity yet today. Register a client to start the queue.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!--SERVICES VOLUME-->
+    <section class="card">
+        <h2 class="card-title">Services Volume (Today)</h2>
+        <div class="donut-wrap">
+            <div class="donut" id="donut">
+                <svg viewBox="0 0 200 200" role="img" aria-label="Share of today's tickets by service"></svg>
+                <div class="donut-center" aria-live="polite">
+                    <span class="donut-num">0</span>
+                    <span class="donut-label">Tickets today</span>
+                </div>
+            </div>
+            <ul class="donut-legend" id="donut-legend"></ul>
+        </div>
+        <script id="donut-data" type="application/json">{{ service_volume|tojson }}</script>
+    </section>
+</div>
+{% endblock %}

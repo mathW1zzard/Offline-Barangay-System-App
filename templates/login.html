@@ -1,0 +1,31 @@
+{% extends "auth_base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Sign in{% endblock %}
+{% block badge %}{{ icon('lock', 26) }}{% endblock %}
+{% block eyebrow %}<p class="auth-eyebrow">Staff sign-in</p>{% endblock %}
+{% block heading %}Barangay Queuing and Attendance Management{% endblock %}
+{% block description %}To login the application{% endblock %}
+{% block body %}
+        <form action="/login" method="post" class="form">
+            <div class="field">
+                <label for="username">Username</label>
+                <input type="text" name="username" id="username" autocomplete="username" required autofocus>
+            </div>
+
+            <div class="field">
+                <label for="password">Password</label>
+                <input type="password" name="password" id="password" autocomplete="current-password" data-pw required>
+            </div>
+
+            <label class="switch-row">
+                <input type="checkbox" class="pw-toggle switch-input">
+                <span class="switch" aria-hidden="true"></span>
+                <span>Show password</span>
+            </label>
+
+            <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+        </form>
+
+        <p class="auth-foot"><a href="/forgot-password">Forgot password?</a></p>
+        <p class="footer"> Copyright &#169; 2026 Soft-Tech Builders, All rights reserved</p>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "auth_base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Set up - Step 2 of 2{% endblock %}
+{% block badge %}{{ icon('key', 26) }}{% endblock %}
+{% block eyebrow %}<p class="step-indicator">First-time setup &middot; Step 2 of 2</p>{% endblock %}
+{% block heading %}Save your recovery key{% endblock %}
+{% block description %}2nd step to create a new account{% endblock %}
+{% block intro %}<p class="auth-intro">This key is the only way back in if the administrator account is ever locked out. It will not be shown again. Write it down and keep it with the Barangay Captain.</p>{% endblock %}
+{% block body %}
+        <div class="recovery-key" aria-label="Recovery key">{{ recovery_key }}</div>
+
+        <label class="check-row">
+            <input type="checkbox" id="confirm_saved" data-unlocks="proceedLink">
+            <span>I have written down or printed this key and stored it somewhere safe</span>
+        </label>
+
+        <a href="/login" id="proceedLink" class="btn btn-primary btn-block is-disabled" aria-disabled="true" tabindex="-1">Continue to sign in</a>
+        <p class="footer"> Copyright &#169; 2026 Soft-Tech Builders, All rights reserved</p>
+{% endblock %}

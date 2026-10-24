@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, badge %}
+{% block title %}Services{% endblock %}
+{% block page_title %}Services{% endblock %}
+{% block page_subtitle %}Service configuration{% endblock %}
+{% block description %}To display the services{% endblock %}
+{% block content %}
+{% if message %}
+<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}" role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
+{% endif %}
+<div class="section-head">
+    <h2>Services Directory</h2>
+    <button type="button" class="btn btn-primary" data-open-modal="add-modal">{{ icon('plus', 18) }} Add service</button>
+</div>
+
+<section class="card">
+    <h2 class="card-title">Current Offered Services</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Service name</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for service in services %}
+                <tr>
+                    <td class="cell-primary">{{ service.service_name }}</td>
+                    <td>{{ badge(service.service_status) }}</td>
+                    <td>
+                        <div class="row-actions">
+                            <button type="button" class="btn btn-sm btn-outline"
+                                data-edit-service
+                                data-id="{{ service.id }}"
+                                data-name="{{ service.service_name }}"
+                                data-status="{{ service.service_status }}">{{ icon('pencil', 16) }} Edit</button>
+                            <button type="button" class="btn btn-sm btn-danger-outline"
+                                data-confirm
+                                data-action="/services/delete/{{ service.id }}"
+                                data-title="Delete this service?"
+                                data-message="{{ service.service_name }} will be removed from the queue system. If it already has tickets or attendance history, it is set to Inactive instead so those records stay intact."
+                                data-label="Delete service"
+                                data-variant="danger">{{ icon('trash', 16) }} Delete</button>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" class="empty-row">No services yet. Add the first service visitors can queue for.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block dialogs %}
+<!-- ADD SERVICE -->
+<dialog class="modal" id="add-modal">
+    <form action="/services/add" method="post" class="modal-body">
+        <h2>Add service</h2>
+        <p class="modal-text">Define a service residents can line up for. Only active services appear on the registration page.</p>
+        <div class="field">
+            <label for="add-name">Service name</label>
+            <input type="text" name="service_name" id="add-name" placeholder="e.g. Cedula / Community Tax Certificate" required>
+        </div>
+        <div class="field">
+            <label for="add-status">Status</label>
+            <select name="service_status" id="add-status">
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-close>Cancel</button>
+            <button type="submit" class="btn btn-primary">Add service</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- EDIT SERVICE (one dialog, filled in by app.js) -->
+<dialog class="modal" id="edit-modal">
+    <form method="post" id="edit-form" class="modal-body">
+        <h2>Edit service</h2>
+        <p class="modal-text">Changes apply to new tickets right away.</p>
+        <div class="field">
+            <label for="edit-name">Service name</label>
+            <input type="text" name="service_name" id="edit-name" required>
+        </div>
+        <div class="field">
+            <label for="edit-status">Status</label>
+            <select name="service_status" id="edit-status">
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-close>Cancel</button>
+            <button type="submit" class="btn btn-primary">Save changes</button>
+        </div>
+    </form>
+</dialog>
+{% endblock %}

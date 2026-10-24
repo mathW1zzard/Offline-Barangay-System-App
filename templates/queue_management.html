@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, badge, lane_tag %}
+{% block title %}Queue Management{% endblock %}
+{% block page_title %}Queue Management{% endblock %}
+{% block page_subtitle %}Live counter{% endblock %}
+{% block description %}To display the tickets queue{% endblock %}
+{% if message %}
+<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}" role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
+{% endif %}
+{% block content %}
+<!--LIVE PANEL-->
+<section class="live-panel">
+    <!--NOW SERVING-->
+    <div class="card now-serving{{ ' is-idle' if not current_ticket }}">
+        <p class="label">Now serving</p>
+
+        {% if current_ticket %}
+        <div class="serving-main">
+            <div class="serving-number">
+                <h2>{{ current_ticket.ticket_number }}</h2>
+                {{ lane_tag(current_ticket.lane) }}
+            </div>
+            <div class="serving-person">
+                <p class="label">Current Visitor Name</p>
+                <h3>{{ current_ticket.citizen_name }}</h3>
+                <p class="hint">Requested service: <strong class="service-name">{{ current_ticket.service_label }}</strong></p>
+            </div>
+        </div>
+
+        <div class="serving-actions">
+            <form action="/complete/{{ current_ticket.id }}" method="post">
+                <button type="submit" class="btn btn-success" data-confirm
+                    data-action="/complete/{{ current_ticket.id }}" 
+                    data-title="Mark as complete?"
+                    data-message="{{ current_ticket.ticket_number }} ({{ current_ticket.citizen_name }}) has been served. This is saved to attendance history and cannot be undone."
+                    data-label="Mark complete" data-variant="success">{{ icon('check', 18) }} Mark complete</button>
+            </form>
+            <form action="/skip/{{ current_ticket.id }}" method="post">
+                <button type="submit" class="btn btn-outline">{{ icon('skip', 18) }} Skip</button>
+            </form>
+            <button type="button" class="btn btn-danger-outline" data-confirm
+                data-action="/no-show/{{ current_ticket.id }}" data-title="Mark as no-show?"
+                data-message="{{ current_ticket.ticket_number }} ({{ current_ticket.citizen_name }}) did not come to the counter. This is saved to attendance history and cannot be undone."
+                data-label="Mark as no-show" data-variant="danger">{{ icon('user-x', 18) }} No-show</button>
+        </div>
+        {% else %}
+        <div class="serving-idle">
+            <p class="idle-message">{% if upcomming %}Nobody is at the counter. Call the next visitor when you are
+                ready.{% else %}Nobody is at the counter and nobody is waiting.{% endif %}</p>
+            {% if upcomming %}
+            <button type="button" class="btn btn-primary btn-xl" data-confirm data-action="/call-next/{{ upcomming[0].id }}"
+                data-title="Call the next visitor?"
+                data-message="{{ upcomming[0].ticket_number }} ({{ upcomming[0].citizen_name }}) will be called to the counter and the announcement will play."
+                data-label="Call {{ upcomming[0].ticket_number }}">{{ icon('bell', 22) }} Call next</button>
+            {% else %}
+            <button type="button" class="btn btn-primary btn-xl" disabled>{{ icon('bell', 22) }} Call next</button>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!--UP NEXT-->
+    <div class="card up-next">
+        <p class="label">Up next</p>
+        {% for ticket in upcomming %}
+        <div class="next-item">
+            <div>
+                <p class="next-number">{{ ticket.ticket_number }}</p>
+                <p class="next-name">{{ ticket.citizen_name }}</p>
+            </div>
+            {{ lane_tag(ticket.lane) }}
+        </div>
+        {% else %}
+        <p class="empty-note">Nobody is waiting.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<!--QUEUE TABLE-->
+<div class="section-head">
+    <h2>Today's Queue</h2>
+    {% if tickets %}
+    <button type="button" class="btn btn-danger-outline" data-confirm data-action="/queue/clear"
+        data-title="Clear the live queue?"
+        data-message="All {{ tickets|length }} unserved ticket(s) (waiting, called and skipped) will be removed from the queue and saved to attendance history as no-show. Ticket numbers keep counting up; they do not restart. This cannot be undone."
+        data-label="Clear queue" data-variant="danger">{{ icon('trash', 18) }} Clear queue</button>
+    {% else %}
+    <button type="button" class="btn btn-danger-outline" disabled>{{ icon('trash', 18) }} Clear queue</button>
+    {% endif %}
+</div>
+<section class="card">
+    <div class="tabs" role="tablist" aria-label="Filter by status">
+        <button type="button" role="tab" class="tab-btn active" aria-selected="true" data-status="all">Active queue
+            <span class="tab-count">{{ all_active }}</span></button>
+        <button type="button" role="tab" class="tab-btn" aria-selected="false" data-status="waiting">Waiting <span
+                class="tab-count">{{ waiting_count }}</span></button>
+        <button type="button" role="tab" class="tab-btn" aria-selected="false" data-status="called">Called <span
+                class="tab-count">{{ called_count }}</span></button>
+        <button type="button" role="tab" class="tab-btn" aria-selected="false" data-status="skipped">Skipped <span
+                class="tab-count">{{ skipped_count }}</span></button>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Ticket</th>
+                    <th>Visitor name</th>
+                    <th>Type</th>
+                    <th>Service</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ticket in tickets %}
+                <tr class="ticket-row" data-status="{{ ticket.status }}">
+                    <td class="cell-primary">{{ ticket.ticket_number }}</td>
+                    <td class="cell-primary">{{ ticket.citizen_name }}</td>
+                    <td>{{ lane_tag(ticket.lane) }}</td>
+                    <td>{{ ticket.service_label }}</td>
+                    <td>{{ badge(ticket.status) }}</td>
+                    <td>
+                        {% if ticket.status == "skipped" %}
+                        <div class="row-actions">
+                            <button type="button" class="btn btn-sm btn-outline" {% if current_ticket %}disabled
+                                title="Finish the visitor at the counter first" {% else %} data-confirm
+                                data-action="/recall/{{ ticket.id }}" data-title="Recall this visitor?"
+                                data-message="{{ ticket.ticket_number }} ({{ ticket.citizen_name }}) will be called to the counter again and the announcement will play."
+                                data-label="Recall {{ ticket.ticket_number }}" {% endif %}>{{ icon('recall', 16) }}
+                                Recall</button>
+                            <button type="button" class="btn btn-sm btn-danger-outline" data-confirm
+                                data-action="/no-show/{{ ticket.id }}" data-title="Mark as no-show?"
+                                data-message="{{ ticket.ticket_number }} ({{ ticket.citizen_name }}) did not come to the counter. This is saved to attendance history and cannot be undone."
+                                data-label="Mark as no-show" data-variant="danger">{{ icon('user-x', 16) }}
+                                No-show</button>
+                        </div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                <tr id="tab-empty" {% if tickets %}hidden{% endif %}>
+                    <td colspan="6" class="empty-row">No tickets in this view.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const announcementClips = {{ announcement_clips | tojson }};
+    let currentClip = 0;
+
+    function playAnnouncement() {
+        if (currentClip >= announcementClips.length) {
+            return;
+        }
+
+        const audio = new Audio(`/static/audio/${announcementClips[currentClip]}.mp3`);
+        audio.addEventListener("ended", function () {
+            currentClip++;
+            playAnnouncement();
+        });
+
+        audio.play().catch(error => {
+            console.error("Audio playback failed:", error);
+        });
+    }
+    if (announcementClips.length > 0) {
+        playAnnouncement();
+    }
+    
+</script>
+{% endblock %}
+
