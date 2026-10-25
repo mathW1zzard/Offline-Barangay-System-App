@@ -10,7 +10,7 @@ import webview
 from app_logging import setup_logging, log
 setup_logging()   # first, so even an error while importing main is recorded
 
-from paths import resource_path
+from paths import resource_path, DATA_DIR
 
 STARTUP_TIMEOUT = 30.0
 
@@ -81,8 +81,35 @@ if __name__ == "__main__":
         webview.settings["ALLOW_DOWNLOADS"] = True
 
     webview.create_window("Barangay Queuing and Attendance Management", url, width=1200, height=800)
+    
+    display_window = None
+    def open_display():
+        global display_window
+        if display_window is not None and not display_window.events.closed.is_set():
+            try:
+                display_window.show()
+                return
+            except Exception:
+                log.exception("Could not show the display window")
+                display_window = None
+
+        window = webview.create_window("Now Serving", f"{url}/display", width=1280, height=720)
+        if window is None:
+            raise RuntimeError("pywebview did not create the display window")
+        display_window = window
+
+        def clear_display_window():
+            global display_window
+            if display_window is window:
+                display_window = None
+
+        window.events.closed += clear_display_window
+        
+    main.open_display_window = open_display 
     webview.start(icon=resource_path("app_icon.ico"))
 
+    log.info("Data folder: %s", DATA_DIR)
+    
     server.should_exit = True        # ask uvicorn to finish in-flight requests
     thread.join(timeout=5)
     main.log_app_closed()

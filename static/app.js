@@ -112,6 +112,7 @@
     document.addEventListener('submit', (e) => {
         const form = e.target;
         if (!(form instanceof HTMLFormElement) || form.method.toLowerCase() !== 'post') return;
+        if (form.hasAttribute('data-no-lock')) return;
         if (form.hasAttribute('data-needs-confirm') && !form.dataset.confirmed) return;
         if (form.dataset.submitting) {
             e.preventDefault();   // second click / second Enter press: ignore it
@@ -274,6 +275,7 @@
             legend.appendChild(li);
         }
         showTotal();
+        
     }
 })();
 

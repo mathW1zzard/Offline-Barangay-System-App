@@ -1921,3 +1921,18 @@ def display_data():
                     .order_by(Ticket.called_at.desc()).first()
         now_serving = current.ticket_number if current else None
     return {"now_serving": now_serving, "upcoming": [t.ticket_number for t in get_incoming_order(limit=3)]}
+
+open_display_window = None
+
+@app.post("/display/open")
+def open_display(request: Request):
+    if open_display_window is None:
+        flash(request, True, f"Open {request.base_url}display in another browser window.")
+        return RedirectResponse(url="/dashboard", status_code=303)
+    try:
+        open_display_window()
+    except Exception:
+        log.exception("Could not open the display window")
+        flash(request, False, "The display screen could not be opened. See app.log.")
+        return RedirectResponse(url="/dashboard", status_code=303)
+    return Response(status_code=204)

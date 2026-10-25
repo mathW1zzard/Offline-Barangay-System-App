@@ -1,4 +1,5 @@
-<!doctype html>
+{% from "_macros.html" import icon -%}
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -6,37 +7,155 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Now Serving</title>
     <link rel="stylesheet" href="/static/style.css">
+
+    <script>
+        try { if (localStorage.getItem('theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch (e) { }
+    </script>
+
     <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #0F172A;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #0F172A;
+            --text-color: #ffffff;
+        }
+
         body {
             font-family: "Plus Jakarta Sans", system-ui, sans-serif;
             text-align: center;
             padding: 4vh 4vw;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
         }
 
         #now {
-            font-size: 18vw;
+            font-size: 19vw;
             font-weight: 800;
             line-height: 1;
         }
 
         #next {
-            font-size: 4vw;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 3.5vw;
+            gap: 2vh;
+        }
+
+        .next-row {
+            font-size: 3vw;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .next-empty {
+            font-size: 2.5vw;
+            color: var(--muted, #64748b);
+        }
+
+        #theme-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border: 0;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            cursor: pointer;
+            background: var(--text-color);
+            color: var(--bg-color);
+            opacity: .35;                       /* quiet on a TV; full strength on hover or keyboard focus */
+            transition: opacity .2s, background-color .3s, color .3s;
+        }
+        #theme-toggle:hover,
+        #theme-toggle:focus-visible {
+            opacity: 1;
+        }
+
+        #theme-toggle svg {
+            width: 26px;
+            height: 26px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* Light mode shows the moon; night mode shows the sun */
+        #theme-toggle .icon-sun {
+            display: none;
+        }
+
+        [data-theme="dark"] #theme-toggle .icon-sun {
+            display: block;
+        }
+
+        [data-theme="dark"] #theme-toggle .icon-moon {
+            display: none;
         }
     </style>
 </head>
 
 <body>
-    <p>Now serving</p>
+    <p style="font-size: 3vw;">Now serving</p>
     <div id="now">--</div>
-    <p>Up next</p>
+    <p style="font-size: 1.5vw;">Up next</p>
+    <br>
     <div id="next"></div>
+    <button type="button" id="theme-toggle" aria-label="Switch to night mode" title="Switch to night mode">
+        <span class="icon-moon">{{ icon('moon', 26) }}</span>
+        <span class="icon-sun">{{ icon('sun', 26) }}</span>
+    </button>
     <script>
+
         const nowEl = document.getElementById("now"), nextEl = document.getElementById("next");
+
+        function showUpcoming(tickets) {
+            const items = (tickets || []).map((number) => {
+                const row = document.createElement("div");
+                row.className = "next-row";
+                row.textContent = number;                 // textContent, never innerHTML
+                return row;
+            });
+            if (!items.length) {
+                const empty = document.createElement("div");
+                empty.className = "next-empty";
+                empty.textContent = "No one waiting";
+                items.push(empty);
+            }
+            nextEl.replaceChildren(...items);
+        }
+
+        const toggleBtn = document.getElementById('theme-toggle');
+        function applyTheme(theme) {
+            document.documentElement.setAttribute("data-theme", theme);
+            const label = theme === "dark" ? "Switch to light mode" : "Switch to night mode";
+            toggleBtn.setAttribute("aria-label", label);
+            toggleBtn.title = label;
+        }
+
+        let savedTheme = null;
+        try { savedTheme = localStorage.getItem("theme"); } catch (e) { /* storage unavailable: use light */ }
+        applyTheme(savedTheme === "dark" ? "dark" : "light");
+
+        toggleBtn.addEventListener("click", () => {
+            const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+            applyTheme(next);
+            try { localStorage.setItem("theme", next); } catch (e) { /* not saved, still switches */ }
+        });
+
         async function refresh() {
             try {
                 const d = await (await fetch("/display/data", { cache: "no-store" })).json();
                 nowEl.textContent = d.now_serving || "--";
-                nextEl.textContent = d.upcoming.join("   ") || "No one waiting";
+                showUpcoming(d.upcoming);
             } catch (e) { /* keep the last numbers on screen */ }
         }
         function connect() {
