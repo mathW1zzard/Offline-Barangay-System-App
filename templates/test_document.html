@@ -1,0 +1,193 @@
+{% from "_macros.html" import doc_header %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Test document</title>
+    <link rel="stylesheet" href="/static/document_header.css">
+    <style>
+        /* The paper size chosen in Settings. The browser's own print window can still change it. */
+        @page {
+            size: {
+                    {
+                    paper_css
+                }
+            }
+
+            ;
+            margin: 15mm;
+        }
+
+        :root {
+            --navy: #1b2a4a;
+            --orange: #e87722;
+            --muted: #6b7690;
+            --line: #dfe3ec;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #e6e8ec;
+            color: var(--navy);
+            font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+            font-size: 13px;
+        }
+
+        .toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: #fff;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 20px;
+        }
+
+        .toolbar-text {
+            color: var(--muted);
+            flex: 1;
+        }
+
+        .btn-back,
+        .btn-print {
+            border: 0;
+            border-radius: 6px;
+            padding: 8px 18px;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .btn-back {
+            background: #f3f4f6;
+            color: #000080;
+        }
+
+        .btn-print {
+            background: var(--orange);
+            color: #fff;
+        }
+
+        .page {
+            width: 100%;
+            max-width: 900px;
+            margin: 24px auto 48px;
+            background: #fff;
+            padding: 40px 44px;
+            box-shadow: 0 2px 14px rgba(27, 42, 74, .18);
+        }
+
+        .title {
+            text-align: center;
+            margin: 22px 0 6px;
+            font-size: 20px;
+            letter-spacing: .04em;
+        }
+
+        .stamp {
+            text-align: center;
+            color: var(--orange);
+            font-weight: 800;
+            letter-spacing: .12em;
+            margin-bottom: 22px;
+        }
+
+        .body p {
+            margin: 0 0 14px;
+            line-height: 1.7;
+            text-align: justify;
+            text-indent: 40px;
+        }
+
+        .signatures {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 56px;
+            break-inside: avoid;
+        }
+
+        .sign {
+            min-width: 220px;
+        }
+
+        .sign .name {
+            display: block;
+            border-bottom: 1px solid var(--navy);
+            font-weight: 700;
+            padding-bottom: 2px;
+            min-height: 20px;
+            margin-top: 34px;
+        }
+
+        .sign .title {
+            color: var(--muted);
+            font-size: 11px;
+            margin-top: 3px;
+        }
+
+        @media print {
+            body {
+                background: #fff;
+            }
+
+            .toolbar {
+                display: none;
+            }
+
+            .page {
+                max-width: none;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+
+            * {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="toolbar">
+        <div class="toolbar-text">Test page. Nothing is saved and no control number is used.</div>
+        <a class="btn-back" href="/wizard">Back</a>
+        <button type="button" class="btn-print" onclick="window.print()">Print</button>
+    </div>
+
+    <div class="page">
+        {{ doc_header(branding) }}
+        <h1 class="title">TEST DOCUMENT</h1>
+        <p class="stamp">NOT AN OFFICIAL DOCUMENT</p>
+        <div class="body">
+            <p>This page checks how your printed documents will look. Please make sure that the barangay name is spelled
+                correctly,
+                that each logo is sharp and not stretched, and that nothing is cut off at the edges of the paper.</p>
+            <p>The size of this page follows the paper size chosen in Settings. If it does not fit the paper in the
+                printer,
+                change the paper size in Settings under Document defaults and print this page again.</p>
+        </div>
+        <div class="signatures">
+            <div class="sign">
+                <span class="name">{{ branding.secretary_name|upper }}</span>
+                <div class="title">{{ branding.secretary_title }}</div>
+            </div>
+            <div class="sign">
+                <span class="name">{{ branding.captain_name|upper }}</span>
+                <div class="title">{{ branding.captain_title }}</div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

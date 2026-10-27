@@ -135,6 +135,16 @@
     <path d="M20 12h2" />
     <path d="m6.34 17.66-1.41 1.41" />
     <path d="m19.07 4.93-1.41 1.41" />
+    {%- elif name == 'sliders' -%}
+    <line x1="21" x2="14" y1="4" y2="4" />
+    <line x1="10" x2="3" y1="4" y2="4" />
+    <line x1="21" x2="12" y1="12" y2="12" />
+    <line x1="8" x2="3" y1="12" y2="12" />
+    <line x1="21" x2="16" y1="20" y2="20" />
+    <line x1="12" x2="3" y1="20" y2="20" />
+    <line x1="14" x2="14" y1="2" y2="6" />
+    <line x1="8" x2="8" y1="10" y2="14" />
+    <line x1="16" x2="16" y1="18" y2="22" />
     {%- endif -%}
 </svg>
 {%- endmacro %}
@@ -149,4 +159,22 @@
 {% macro lane_tag(lane) -%}
 <span class="tag {{ 'tag-priority' if lane == 'P' else 'tag-regular' }}">{{ 'Priority' if lane == 'P' else 'Regular'
     }}</span>
+{%- endmacro %}
+
+{#- One logo: shown when it exists. On the Settings preview (ids=True) it is always present, hidden when empty, so the page script can fill it in. -#}
+{% macro _logo(url, id, ids) -%}
+{%- if url or ids -%}<img alt=""{% if url %} src="{{ url }}"{% else %} hidden{% endif %}{% if ids %} id="{{ id }}"{% endif %}>{%- endif -%}
+{%- endmacro %}
+
+{#- The header of every printed page. b = the branding dict (name, header lines, logos). -#}
+{% macro doc_header(b, ids=False) -%}
+<header class="doc-head">
+    <div class="doc-logos">{{ _logo(b.logos.left, 'pv-left', ids) }}</div>
+    <div class="doc-title">
+        <p class="doc-line1"{% if ids %} id="pv-line1"{% endif %}>{{ b.header_line_1|upper }}</p>
+        <h1 class="doc-name"{% if ids %} id="pv-name"{% endif %}>{{ b.full_name|upper }}</h1>
+        <p class="doc-line2"{% if ids %} id="pv-line2"{% endif %}>{{ b.header_line_2 }}</p>
+    </div>
+    <div class="doc-logos doc-logos-right">{{ _logo(b.logos.right, 'pv-right', ids) }}{{ _logo(b.logos.third, 'pv-third', ids) }}</div>
+</header>
 {%- endmacro %}

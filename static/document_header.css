@@ -1,0 +1,62 @@
+/* The header at the top of every printed page, and of the preview on the Settings page.
+   Three columns: left logo | centred text | right logos. The middle column is always centred
+   on the page, whether or not a logo is present. */
+.doc-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--navy, #1b2a4a);
+}
+
+.doc-logos {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.doc-logos-right {
+    justify-content: flex-end;
+}
+
+.doc-logos img {
+    max-width: 130px;
+    max-height: 90px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+}
+
+.doc-logos img[hidden] {
+    display: none;
+}
+
+.doc-title {
+    text-align: center;
+}
+
+.doc-title p:empty {
+    display: none;                 /* an empty header line takes no space */
+}
+
+.doc-line1 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    color: var(--orange, #e87722);
+}
+
+.doc-name {
+    margin: 2px 0 0;
+    font-size: 20px;
+    line-height: 1.2;
+    color: var(--navy, #1b2a4a);
+}
+
+.doc-line2 {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--muted, #6b7690);
+}

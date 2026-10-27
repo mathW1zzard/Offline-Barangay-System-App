@@ -4,11 +4,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi import Request 
 from fastapi import Form
 from fastapi import Depends
-from fastapi.responses import RedirectResponse, Response
+from fastapi import File, UploadFile
+from fastapi.responses import RedirectResponse, Response, FileResponse
 from app_logging import setup_logging, log
 setup_logging()
 from database import SessionLocal, Ticket, Service, Visit, Admin, AdminLog, engine
 from paths import resource_path, data_path
+import branding
 from datetime import datetime, date, time, timedelta
 from starlette.middleware.sessions import SessionMiddleware
 from enum import Enum
@@ -84,7 +86,12 @@ async def block_cross_origin_posts(request: Request, call_next):
             return Response("Cross-origin request blocked", status_code=403)
     return await call_next(request)
 
-templates = Jinja2Templates(directory=resource_path("templates"))
+def branding_context(request: Request) -> dict:
+    """Runs for every page: gives each template the barangay name, logos and signatories from Settings."""
+    b = branding.get_branding()
+    return {"branding": b, "barangay_name": b["full_name"]}
+
+templates = Jinja2Templates(directory=resource_path("templates"), context_processors=[branding_context])
 
 PAGE_SIZE = 15
 
@@ -423,8 +430,6 @@ def active_queue_today():
         db.close()
         
 templates.env.globals["active_queue_today"] = active_queue_today
-BARANGAY_NAME = "Barangay 4, San Mateo, Isabela"
-templates.env.globals["barangay_name"] = BARANGAY_NAME
 
 class StatusEnum(str, Enum):
     ACTIVE = "Active"
@@ -628,7 +633,7 @@ def build_slip(ticket_number: str, citizen_name: str, service_name: str, lane: s
         return textwrap.fill(label + slip_text(value), width=width, subsequent_indent=" " * len(label)) + "\n"
 
     _style(p, "center", True, SIZE_HEADER)
-    p.text(fill(BARANGAY_NAME.upper(), SIZE_HEADER))
+    p.text(fill(branding.get_branding()["full_name"].upper(), SIZE_HEADER))
     _style(p, "center", False, SIZE_NORMAL)
     p.text("Official Queue Slip\n")
     p.text(rule)
@@ -864,8 +869,16 @@ class NotAuthenticated(Exception):
 async def not_authenticated_handler(request: Request, exc: NotAuthenticated):
     return RedirectResponse(url="/login", status_code=303)
 
+class SetupRequired(Exception):
+    pass
 
-def login_required(request: Request):
+
+@app.exception_handler(SetupRequired)
+async def setup_required_handler(request: Request, exc: SetupRequired):
+    return RedirectResponse(url="/wizard", status_code=303)
+
+
+def check_signed_in(request: Request):
     admin_id = request.session.get("admin_id")
     if not admin_id:
         raise NotAuthenticated()
@@ -879,6 +892,23 @@ def login_required(request: Request):
     global active_admin_id
     active_admin_id = admin_id
     ensure_daily_rollover()
+    
+def login_required(request: Request):
+    """Every normal page: signed in AND the first-run setup finished."""
+    check_signed_in(request)
+    if not branding.is_setup_complete():
+        raise SetupRequired()
+
+
+def wizard_login(request: Request):
+    """The wizard's own pages: signed in, but without the setup gate (they ARE the setup)."""
+    check_signed_in(request)
+    
+    
+def admin_required(request: Request):
+    """Settings is for the administrator only. Today the one account IS the administrator, so this
+    just checks the sign-in. When staff accounts arrive, the role check goes here and nowhere else."""
+    login_required(request)
 
 @app.get("/change-password", dependencies=[Depends(login_required)])
 def show_change_password(request: Request):
@@ -1564,7 +1594,6 @@ def attendance_print(request: Request, date_from: str = "", date_to: str = "", l
             "total_rows": len(rows),
             "filters_text": ", ".join(parts),
             "range_text": range_label(d_from, d_to),
-            "barangay_name": "Barangay 4, San Mateo, Isabela",
             "generated_at": datetime.now().strftime("%m/%d/%Y %I:%M %p"),
         },
     )
@@ -1901,7 +1930,256 @@ def purge_old_records(request: Request, cutoff: str = Form(...)):
             flash(request, True, f"No attendance records exist from before {cutoff_date.strftime('%b %d, %Y')}. Nothing was deleted.")
     return RedirectResponse(url="/maintenance", status_code=303)
 
-# Public display page: ticket numbers only, never names
+# SETTINGS (barangay profile, logos, signatories, document defaults) and the FIRST-RUN WIZARD.
+# The wizard and the Settings page share the same helpers, so the same rules apply in both places.
+SETTING_LABELS = {
+    "barangay_name": "Barangay name", "municipality": "Municipality", "province": "Province",
+    "header_line_1": "Header line 1", "header_line_2": "Header line 2",
+    "signatory_captain_name": "Captain name", "signatory_captain_title": "Captain title",
+    "signatory_secretary_name": "Secretary name", "signatory_secretary_title": "Secretary title",
+    "paper_size": "Paper size", "control_number_format": "Control number style",
+}
+
+def profile_values(barangay_name, municipality, province, header_line_1, header_line_2) -> dict:
+    return {"barangay_name": clean_text(barangay_name, 60), "municipality": clean_text(municipality, 60),
+            "province": clean_text(province, 60), "header_line_1": clean_text(header_line_1, 80),
+            "header_line_2": clean_text(header_line_2, 80)}
+
+def signatory_values(captain_name, captain_title, secretary_name, secretary_title) -> dict:
+    return {"signatory_captain_name": clean_text(captain_name, 80),
+            "signatory_captain_title": clean_text(captain_title, 60),
+            "signatory_secretary_name": clean_text(secretary_name, 80),
+            "signatory_secretary_title": clean_text(secretary_title, 60)}
+
+def logo_changes_from_form(files: dict, remove_flags: dict):
+    """Which logo pictures were chosen and which slots were emptied, read from the submitted form."""
+    uploads, removals = {}, set()
+    for slot in branding.LOGO_SLOTS:
+        chosen = files[slot]
+        if chosen is not None and chosen.filename:
+            uploads[slot] = chosen.file.read(branding.MAX_LOGO_BYTES + 1)   # one byte over the limit is enough to refuse it
+        elif remove_flags[slot] == "1":
+            removals.add(slot)
+    return uploads, removals
+
+def apply_settings(request: Request, new: dict, action: str) -> bool:
+    """Save the settings that changed and write ONE audit line describing them. True if anything changed."""
+    old = branding.load_settings()
+    changes = [f'{SETTING_LABELS[k]}: "{old[k]}" -> "{v}"' for k, v in new.items() if old[k] != v]
+    if changes:
+        branding.save_settings(new)
+        log_action("Settings", action, "; ".join(changes), request)
+    return bool(changes)
+
+def apply_logos(request: Request, uploads: dict, removals: set) -> list:
+    """Raises branding.LogoError (and changes nothing) if a picture is refused."""
+    changes = branding.apply_logo_changes(uploads, removals)
+    if changes:
+        log_action("Settings", "Logos Updated", "; ".join(changes), request)
+    branding.clear_later("logos")        # she has looked at this section, so stop reminding her
+    return changes
+
+# ---- the Settings page
+def settings_page(request: Request, form: dict | None = None, errors: dict | None = None, status_code: int = 200):
+    """Draw the Settings page. `form` is what was typed in a section that failed (so it is not lost);
+    `errors` is {section: message}, shown inside that section."""
+    values = branding.load_settings()
+    return templates.TemplateResponse(request, "settings.html", {
+        "values": values,                                # what is saved
+        "shown": {**values, **(form or {})},             # what the boxes show
+        "errors": errors or {},
+        "saved": request.session.pop("settings_flash", None),   # one-time "Saved." message
+        "logos": branding.logo_info(values),
+        "paper_sizes": branding.PAPER_SIZES,
+        "control_formats": branding.CONTROL_FORMATS,
+    }, status_code=status_code)
+
+def settings_saved(request: Request, section: str, changed: bool):
+    request.session["settings_flash"] = {"section": section, "ok": True,
+                                         "text": "Saved." if changed else "Nothing was changed."}
+    return RedirectResponse(url=f"/settings#{section}", status_code=303)
+
+@app.get("/settings", dependencies=[Depends(admin_required)])
+def show_settings(request: Request):
+    return settings_page(request)
+
+@app.post("/settings/profile", dependencies=[Depends(admin_required)])
+def save_settings_profile(request: Request, barangay_name: str = Form(""), municipality: str = Form(""),
+                          province: str = Form(""), header_line_1: str = Form(""), header_line_2: str = Form("")):
+    new = profile_values(barangay_name, municipality, province, header_line_1, header_line_2)
+    error = branding.validate_profile(new)
+    if error:
+        return settings_page(request, form=new, errors={"profile": error}, status_code=400)
+    return settings_saved(request, "profile", apply_settings(request, new, "Profile Updated"))
+
+@app.post("/settings/signatories", dependencies=[Depends(admin_required)])
+def save_settings_signatories(request: Request, signatory_captain_name: str = Form(""), signatory_captain_title: str = Form(""),
+                              signatory_secretary_name: str = Form(""), signatory_secretary_title: str = Form("")):
+    new = signatory_values(signatory_captain_name, signatory_captain_title,
+                           signatory_secretary_name, signatory_secretary_title)
+    error = branding.validate_signatories(new)
+    if error:
+        return settings_page(request, form=new, errors={"signatories": error}, status_code=400)
+    return settings_saved(request, "signatories", apply_settings(request, new, "Signatories Updated"))
+
+@app.post("/settings/documents", dependencies=[Depends(admin_required)])
+def save_settings_documents(request: Request, paper_size: str = Form(""), control_number_format: str = Form("")):
+    new = {"paper_size": paper_size.strip(), "control_number_format": control_number_format.strip()}
+    error = branding.validate_documents(new)
+    if error:
+        return settings_page(request, form=new, errors={"documents": error}, status_code=400)
+    return settings_saved(request, "documents", apply_settings(request, new, "Document Defaults Updated"))
+
+@app.post("/settings/logos", dependencies=[Depends(admin_required)])
+def save_settings_logos(request: Request,
+                        logo_left: UploadFile | None = File(None), logo_right: UploadFile | None = File(None),
+                        logo_third: UploadFile | None = File(None),
+                        remove_left: str = Form("0"), remove_right: str = Form("0"), remove_third: str = Form("0")):
+    uploads, removals = logo_changes_from_form(
+        {"left": logo_left, "right": logo_right, "third": logo_third},
+        {"left": remove_left, "right": remove_right, "third": remove_third})
+    try:
+        changes = apply_logos(request, uploads, removals)
+    except branding.LogoError as e:
+        return settings_page(request, errors={"logos": str(e)}, status_code=400)   # nothing was changed
+    return settings_saved(request, "logos", bool(changes))
+
+@app.get("/branding/{slot}.png")
+def branding_logo(slot: str):
+    """The saved logos. Open to everyone on purpose (so the sign-in screens can show them); the
+    server only listens on this computer. Serves only the three known slot names."""
+    path = branding.logo_path(slot) if slot in branding.LOGO_SLOTS else None
+    if path is None or not path.exists():
+        return Response(status_code=404)
+    return FileResponse(path, media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=31536000, immutable"})   # the ?v= in the URL changes on every upload
+
+branding.seed_legacy_logos()     # acts once, only on an installation upgraded from the Barangay 4 edition
+
+# ---- the first-run wizard: three steps after the first sign-in, then a finish screen
+def wizard_gate(step: str):
+    """None if she may be on this step; otherwise where to send her. Finished setup goes to the
+    dashboard; she can go Back to an earlier step but not jump ahead of her progress."""
+    if branding.is_setup_complete():
+        return RedirectResponse(url="/dashboard", status_code=303)
+    order = branding.WIZARD_STEPS
+    current = branding.wizard_step()
+    if order.index(step) > order.index(current):
+        return RedirectResponse(url=f"/wizard/{current}", status_code=303)
+    return None
+
+def wizard_page(request: Request, step: str, form: dict | None = None, error: str | None = None, status_code: int = 200):
+    values = branding.load_settings()
+    logos = branding.logo_info(values)
+    skipped = []                         # what the finish screen reminds her about
+    if "logos" in branding.later_items(values) and not any(info["url"] for info in logos.values()):
+        skipped.append("logos")
+    if not (values["signatory_captain_name"] and values["signatory_secretary_name"]):
+        skipped.append("signatories")
+    return templates.TemplateResponse(request, "wizard.html", {
+        "step": step,
+        "step_number": branding.WIZARD_STEPS.index(step) + 1,
+        "step_index": branding.WIZARD_STEPS.index,
+        "shown": {**values, **(form or {})},
+        "logos": logos,
+        "skipped": skipped,
+        "error": error,
+    }, status_code=status_code)
+
+@app.get("/wizard", dependencies=[Depends(wizard_login)])
+def wizard_start():
+    if branding.is_setup_complete():
+        return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url=f"/wizard/{branding.wizard_step()}", status_code=303)
+
+@app.get("/wizard/test-document", dependencies=[Depends(wizard_login)])
+def wizard_test_document(request: Request):
+    """A header-and-signatures test page. Nothing is saved and no control number is used."""
+    paper = branding.PAPER_CSS.get(branding.get_branding()["paper_size"], "A4")
+    return templates.TemplateResponse(request, "test_document.html", {"paper_css": paper})
+
+@app.get("/wizard/{step}", dependencies=[Depends(wizard_login)])
+def show_wizard_step(request: Request, step: str):
+    if step not in branding.WIZARD_STEPS:
+        return RedirectResponse(url="/wizard", status_code=303)
+    return wizard_gate(step) or wizard_page(request, step)
+
+@app.post("/wizard/profile", dependencies=[Depends(wizard_login)])
+def save_wizard_profile(request: Request, barangay_name: str = Form(""), municipality: str = Form(""),
+                        province: str = Form(""), header_line_1: str = Form(""), header_line_2: str = Form("")):
+    blocked = wizard_gate("profile")
+    if blocked:
+        return blocked
+    new = profile_values(barangay_name, municipality, province, header_line_1, header_line_2)
+    error = branding.validate_profile(new)
+    if error:
+        return wizard_page(request, "profile", form=new, error=error, status_code=400)
+    apply_settings(request, new, "Profile Updated")
+    branding.advance_wizard("logos")
+    return RedirectResponse(url="/wizard/logos", status_code=303)
+
+@app.post("/wizard/logos", dependencies=[Depends(wizard_login)])
+def save_wizard_logos(request: Request,
+                      logo_left: UploadFile | None = File(None), logo_right: UploadFile | None = File(None),
+                      logo_third: UploadFile | None = File(None),
+                      remove_left: str = Form("0"), remove_right: str = Form("0"), remove_third: str = Form("0")):
+    blocked = wizard_gate("logos")
+    if blocked:
+        return blocked
+    uploads, removals = logo_changes_from_form(
+        {"left": logo_left, "right": logo_right, "third": logo_third},
+        {"left": remove_left, "right": remove_right, "third": remove_third})
+    already_there = {s for s, info in branding.logo_info(branding.load_settings()).items() if info["url"]}
+    if not uploads and not (already_there - removals):
+        return wizard_page(request, "logos", status_code=400,
+                           error='Choose at least one picture, or press "Do this later".')
+    try:
+        apply_logos(request, uploads, removals)
+    except branding.LogoError as e:
+        return wizard_page(request, "logos", error=str(e), status_code=400)   # nothing was changed
+    branding.advance_wizard("signatories")
+    return RedirectResponse(url="/wizard/signatories", status_code=303)
+
+@app.post("/wizard/logos/later", dependencies=[Depends(wizard_login)])
+def skip_wizard_logos(request: Request):
+    blocked = wizard_gate("logos")
+    if blocked:
+        return blocked
+    branding.mark_later("logos")
+    branding.advance_wizard("signatories")
+    return RedirectResponse(url="/wizard/signatories", status_code=303)
+
+@app.post("/wizard/signatories", dependencies=[Depends(wizard_login)])
+def save_wizard_signatories(request: Request, signatory_captain_name: str = Form(""), signatory_captain_title: str = Form(""),
+                            signatory_secretary_name: str = Form(""), signatory_secretary_title: str = Form("")):
+    blocked = wizard_gate("signatories")
+    if blocked:
+        return blocked
+    new = signatory_values(signatory_captain_name, signatory_captain_title,
+                           signatory_secretary_name, signatory_secretary_title)
+    error = branding.validate_signatories(new, require_names=True)
+    if error:
+        return wizard_page(request, "signatories", form=new, error=error, status_code=400)
+    apply_settings(request, new, "Signatories Updated")
+    branding.advance_wizard("finish")
+    return RedirectResponse(url="/wizard/finish", status_code=303)
+
+@app.post("/wizard/signatories/later", dependencies=[Depends(wizard_login)])
+def skip_wizard_signatories(request: Request):
+    blocked = wizard_gate("signatories")
+    if blocked:
+        return blocked
+    branding.advance_wizard("finish")
+    return RedirectResponse(url="/wizard/finish", status_code=303)
+
+@app.post("/wizard/finish", dependencies=[Depends(wizard_login)])
+def finish_wizard(request: Request):
+    blocked = wizard_gate("finish")
+    if blocked:
+        return blocked
+    branding.finish_setup()
+    log_action("Settings", "Setup Completed", "First-run setup finished", request)
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 # ABOUT
 @app.get("/about", dependencies=[Depends(login_required)])

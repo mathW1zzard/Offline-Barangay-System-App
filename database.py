@@ -319,8 +319,16 @@ def _v2_documents_settings_address(con):
              ("signatory_captain_title", "Barangay Captain"),
              ("signatory_secretary_title", "Barangay Secretary"),
              ("setup_complete", "1")])
-    
-MIGRATIONS = [_v1_counters_and_indexes, _v2_documents_settings_address]
+
+def _v3_legacy_logo_flag(con):
+    """Upgraded Barangay 4 installations still have their three logos bundled as files. Mark them
+    so the app copies those files into the new logo slots once (see branding.seed_legacy_logos).
+    A fresh install has no setup_complete yet, so it never gets the flag."""
+    con.execute("""INSERT OR IGNORE INTO settings ("key", value)
+                   SELECT 'legacy_logos_pending', '1'
+                   WHERE EXISTS (SELECT 1 FROM settings WHERE "key" = 'setup_complete' AND value = '1')""")
+
+MIGRATIONS = [_v1_counters_and_indexes, _v2_documents_settings_address, _v3_legacy_logo_flag]
 LATEST = len(MIGRATIONS)
 
 def _has_table(db_file, name):
