@@ -20,6 +20,7 @@
             <thead>
                 <tr>
                     <th>Service name</th>
+                    <th>Document to issue</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -28,6 +29,7 @@
                 {% for service in services %}
                 <tr>
                     <td class="cell-primary">{{ service.service_name }}</td>
+                    <td>{{ doc_names.get(service.document_template_id, '--') }}</td>
                     <td>{{ badge(service.service_status) }}</td>
                     <td>
                         <div class="row-actions">
@@ -35,7 +37,8 @@
                                 data-edit-service
                                 data-id="{{ service.id }}"
                                 data-name="{{ service.service_name }}"
-                                data-status="{{ service.service_status }}">{{ icon('pencil', 16) }} Edit</button>
+                                data-status="{{ service.service_status }}"
+                                data-template="{{ service.document_template_id or '' }}">{{ icon('pencil', 16) }} Edit</button>
                             <button type="button" class="btn btn-sm btn-danger-outline"
                                 data-confirm
                                 data-action="/services/delete/{{ service.id }}"
@@ -47,7 +50,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="3" class="empty-row">No services yet. Add the first service visitors can queue for.</td></tr>
+                <tr><td colspan="4" class="empty-row">No services yet. Add the first service visitors can queue for.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -72,6 +75,14 @@
                 <option value="Inactive">Inactive</option>
             </select>
         </div>
+        <div class="field">
+            <label for="add-template">Document to issue</label>
+            <select name="document_template_id" id="add-template">
+                <option value="">None</option>
+                {% for t in template_choices %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+            </select>
+            <p class="hint">Adds a Prepare document button for this service on the Now serving card.</p>
+        </div>
         <div class="modal-actions">
             <button type="button" class="btn btn-outline" data-close>Cancel</button>
             <button type="submit" class="btn btn-primary">Add service</button>
@@ -94,6 +105,14 @@
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
             </select>
+        </div>
+        <div class="field">
+            <label for="edit-template">Document to issue</label>
+            <select name="document_template_id" id="edit-template">
+                <option value="">None</option>
+                {% for t in template_choices %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+            </select>
+            <p class="hint">Adds a Prepare document button for this service on the Now serving card.</p>
         </div>
         <div class="modal-actions">
             <button type="button" class="btn btn-outline" data-close>Cancel</button>

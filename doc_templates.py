@@ -52,6 +52,11 @@ def clean_extras(values) -> list:
     """Only keys from the menu, each once, in menu order."""
     return [key for key in EXTRA_MENU if key in set(values)]
 
+def fields_used(body: str) -> set:
+    """The names of the fields a wording uses, e.g. {'Client name', 'Address'}. The issue form
+    uses this to know what it must ask for."""
+    everything = {_norm(f): f for f in ALL_FIELDS}
+    return {everything[_norm(m.group(1))] for m in TOKEN.finditer(body) if _norm(m.group(1)) in everything}
 
 def validate_body(body: str, available) -> str | None:
     """None if the text is fine, otherwise a sentence for the secretary."""

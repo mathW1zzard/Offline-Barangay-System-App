@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, doc_header, documents_tabs %}
+{% block title %}Issue {{ t.name }}{% endblock %}
+{% block page_title %}Documents{% endblock %}
+{% block page_subtitle %}Issue a document{% endblock %}
+{% block description %}Fill in the details and print the document{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/static/document_header.css">
+{% endblock %}
+{% block content %}
+{{ documents_tabs('issue') }}
+
+{% if names_missing %}
+<div class="alert alert-warn" role="status">The names of the Barangay Captain and Secretary are not set yet, so this
+    document cannot be printed.
+    Fill them in under <a href="/settings#signatories">Settings</a>.</div>
+{% endif %}
+
+<div class="editor-layout">
+    <section class="card">
+        <h2 class="card-title">{{ icon('file-text', 22) }} {{ t.name }}</h2>
+        <p class="hint"><a href="/documents" id="choose-another">Choose another document</a>
+            {% if copy_of %} &middot; This is a corrected copy of a voided document.{% endif %}</p>
+        {% if error %}<div class="alert alert-error" role="alert" style="margin-top: 16px">{{ error }}</div>{% endif %}
+
+        <form action="/documents/issue/{{ t.id }}" method="post" class="form" id="form-issue" style="margin-top: 16px">
+            <input type="hidden" name="issue_token" value="{{ token }}">
+            <input type="hidden" name="ticket_number" value="{{ ticket_number }}">
+            <input type="hidden" name="ticket_date" value="{{ ticket_date }}">
+            <input type="hidden" name="copy_of" value="{{ copy_of }}">
+
+            <div class="field">
+                <label for="client_name">Client full name</label>
+                <input type="text" name="client_name" id="client_name" value="{{ shown.client_name }}" maxlength="100"
+                    autocomplete="off" required{% if not shown.client_name %} autofocus{% endif %}>
+            </div>
+            <div class="field">
+                <label for="address">Address (Purok / Street){% if not required.address %} <span
+                        class="hint">(optional)</span>{% endif %}</label>
+                <input type="text" name="address" id="address" value="{{ shown.address }}" maxlength="150"
+                    autocomplete="off" {% if required.address %} required{% endif %}>
+            </div>
+            <div class="field">
+                <label for="purpose">Purpose, for example employment{% if not required.purpose %} <span
+                        class="hint">(optional)</span>{% endif %}</label>
+                <input type="text" name="purpose" id="purpose" value="{{ shown.purpose }}" maxlength="150"
+                    autocomplete="off" {% if required.purpose %} required{% endif %}{% if shown.client_name %}
+                    autofocus{% endif %}>
+            </div>
+            <div class="field">
+                <label for="issue_date">Date of issue</label>
+                <input type="date" name="issue_date" id="issue_date" value="{{ shown.issue_date }}" max="{{ today }}"
+                    required>
+                <p class="hint">Keep today's date unless you are recording a document that was issued earlier.</p>
+            </div>
+
+            {% if 'age' in t.extras or 'civil_status' in t.extras or 'years' in t.extras %}
+            <div class="form-row">
+                {% if 'age' in t.extras %}
+                <div class="field">
+                    <label for="age">Age</label>
+                    <input type="text" name="age" id="age" value="{{ shown.age }}" inputmode="numeric" maxlength="3"
+                        autocomplete="off" required>
+                </div>
+                {% endif %}
+                {% if 'civil_status' in t.extras %}
+                <div class="field">
+                    <label for="civil_status">Civil status</label>
+                    <select name="civil_status" id="civil_status" required>
+                        <option value="">Choose...</option>
+                        {% for c in civil_statuses %}<option value="{{ c }}" {{ 'selected' if shown.civil_status==c }}>
+                            {{ c }}</option>{% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                {% if 'years' in t.extras %}
+                <div class="field">
+                    <label for="years">Years of residence</label>
+                    <input type="text" name="years" id="years" value="{{ shown.years }}" inputmode="numeric"
+                        maxlength="3" autocomplete="off" required>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <fieldset class="field">
+                <legend>Fee</legend>
+                <div class="field">
+                    <label for="fee">Fee (pesos). Leave at 0 if there is no fee.</label>
+                    <input type="text" name="fee" id="fee" value="{{ shown.fee }}" inputmode="decimal"
+                        autocomplete="off">
+                </div>
+                <div id="or-box" hidden>
+                    <label class="check-row check-compact">
+                        <input type="radio" name="or_choice" value="enter" {{ 'checked' if shown.or_choice=='enter' }}>
+                        <span>Enter OR number</span>
+                    </label>
+                    <div class="validity-row">
+                        <label for="or_number">OR number</label>
+                        <input type="text" name="or_number" id="or_number" value="{{ shown.or_number }}" maxlength="40"
+                            autocomplete="off" style="width: 220px">
+                    </div>
+                    <label class="check-row check-compact">
+                        <input type="radio" name="or_choice" value="none" {{ 'checked' if shown.or_choice=='none' }}>
+                        <span>Official Receipt not available</span>
+                    </label>
+                </div>
+                <p class="hint">This only records the fee and the receipt number. It is not a payment.</p>
+            </fieldset>
+
+            <div class="form-actions">
+                <a href="/documents" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary btn-lg" {% if names_missing %} disabled{% endif %}>{{
+                    icon('printer', 20) }} Print</button>
+            </div>
+            <p class="hint">The control number is assigned when you press Print, and the document is saved in the
+                history.</p>
+        </form>
+    </section>
+
+    <aside class="editor-preview" aria-label="Preview">
+        <section class="card">
+            <h2 class="card-title">Preview</h2>
+            <div class="paper-preview">
+                {{ doc_header(branding) }}
+                <p class="control-line">Control No.: <em>assigned when you press Print</em></p>
+                <h2 class="tpl-title">{{ t.name|upper }}</h2>
+                <div class="tpl-body" id="tpl-body"></div>
+                <p class="fee-line" id="fee-line" hidden></p>
+                <div class="tpl-signs">
+                    <div><span class="tpl-sign-name">{{ branding.secretary_name|upper }}</span><small>{{
+                            branding.secretary_title }}</small></div>
+                    <div><span class="tpl-sign-name">{{ branding.captain_name|upper }}</span><small>{{
+                            branding.captain_title }}</small></div>
+                </div>
+            </div>
+        </section>
+    </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    (() => {
+        const $ = (sel, root = document) => root.querySelector(sel);
+        const form = $('#form-issue');
+        const previewBody = $('#tpl-body');
+        const feeLine = $('#fee-line');
+        const orBox = $('#or-box');
+
+        // The receipt questions only appear when there is a fee
+        function syncFee() {
+            const amount = parseFloat(($('#fee').value || '0').replace(/[^0-9.]/g, ''));
+            orBox.hidden = !(amount > 0);
+            $('#or_number').disabled = !($('input[name="or_choice"][value="enter"]').checked);
+        }
+
+        // "Choose another document" keeps the client name, the address and the ticket
+        $('#choose-another').addEventListener('click', (e) => {
+            const keep = new URLSearchParams();
+            [['client_name', '#client_name'], ['address', '#address']].forEach(([key, sel]) => {
+                if ($(sel).value.trim()) keep.set(key, $(sel).value.trim());
+            });
+            ['ticket_number', 'ticket_date'].forEach((key) => {
+                const value = form.elements[key].value;
+                if (value) keep.set(key, value);
+            });
+            const query = keep.toString();
+            e.currentTarget.href = '/documents' + (query ? '?' + query : '');
+        });
+
+        // The preview is made by the server, so it is exactly what will print
+        function draw(paragraphs) {
+            previewBody.replaceChildren(...paragraphs.map((pairs) => {
+                const p = document.createElement('p');
+                pairs.forEach(([text, bold]) => {
+                    const piece = document.createElement(bold ? 'strong' : 'span');
+                    piece.textContent = text;                 // text only: nothing typed can become markup
+                    p.appendChild(piece);
+                });
+                return p;
+            }));
+        }
+        let timer = null;
+        let latest = 0;
+        async function refresh() {
+            const mine = ++latest;
+            try {
+                const reply = await fetch('/documents/issue/{{ t.id }}/preview', { method: 'POST', body: new FormData(form) });
+                if (!reply.ok) throw new Error('status ' + reply.status);
+                const data = await reply.json();
+                if (mine !== latest) return;                  // a newer request is already on its way
+                draw(data.paragraphs);
+                feeLine.textContent = data.fee_line || '';
+                feeLine.hidden = !data.fee_line;
+            } catch (e) { /* keep the last preview */ }
+        }
+        const schedule = () => { clearTimeout(timer); timer = setTimeout(refresh, 250); };
+        form.addEventListener('input', () => { syncFee(); schedule(); });
+        form.addEventListener('change', () => { syncFee(); schedule(); });
+        syncFee();
+        refresh();
+    })();
+</script>
+{% endblock %}

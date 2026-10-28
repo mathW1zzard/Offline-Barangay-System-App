@@ -185,11 +185,11 @@
 </header>
 {%- endmacro %}
 
-{#- The three tabs of the Documents section. The first two arrive in the next step. -#}
+{#- The three tabs of the Documents section. -#}
 {% macro documents_tabs(active) -%}
 <nav class="doc-tabs" aria-label="Documents">
-    <span class="doc-tab is-soon" title="Coming in the next update">Issue a document</span>
-    <span class="doc-tab is-soon" title="Coming in the next update">Issued documents</span>
+    <a class="doc-tab{{ ' active' if active == 'issue' }}" href="/documents"{% if active == 'issue' %} aria-current="page"{% endif %}>Issue a document</a>
+    <a class="doc-tab{{ ' active' if active == 'history' }}" href="/documents/history"{% if active == 'history' %} aria-current="page"{% endif %}>Issued documents</a>
     <a class="doc-tab{{ ' active' if active == 'templates' }}" href="/documents/templates"{% if active == 'templates' %} aria-current="page"{% endif %}>Templates</a>
 </nav>
 {%- endmacro %}

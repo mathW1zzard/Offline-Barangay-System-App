@@ -68,6 +68,8 @@
             $('#edit-form').action = '/services/edit/' + btn.dataset.id;
             $('#edit-name').value = btn.dataset.name;
             $('#edit-status').value = btn.dataset.status;
+            const docChoice = $('#edit-template');
+            if (docChoice) docChoice.value = btn.dataset.template || ''; 
             editDialog.showModal();
         });
     }

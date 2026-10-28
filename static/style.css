@@ -2299,3 +2299,111 @@ fieldset.field legend {
         position: static;
     }
 }
+
+/* ---------------------------------------------------------------- documents: issuing and history */
+.doc-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 20px;
+}
+
+.doc-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 32px 20px 26px;
+    text-align: center;
+    text-decoration: none;
+    background: #fff;
+    border: 2px solid var(--line);
+    border-radius: 22px;
+    transition: border-color .15s, transform .15s, box-shadow .15s;
+}
+
+.doc-card:hover,
+.doc-card:focus-visible {
+    border-color: var(--orange);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow);
+}
+
+.doc-card-icon {
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--orange-soft);
+    color: var(--orange);
+}
+
+.doc-card-name {
+    font-size: 19px;
+    font-weight: 800;
+    color: var(--text);
+}
+
+.doc-card-meta {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.control-line {
+    margin: 12px 0 0;
+    text-align: right;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.fee-line {
+    margin: 14px 0 0;
+    font-size: 12px;
+    color: var(--navy);
+}
+
+.cell-sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+.stat-money {
+    font-size: 30px;
+}
+
+.tag-warn {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.badge-issued {
+    background: #dcfce7;
+    color: var(--green-dark);
+    --dot: var(--green);
+}
+
+.badge-voided {
+    background: #fee2e2;
+    color: var(--red-dark);
+    --dot: var(--red);
+}
+
+.totals-card summary {
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.totals-card[open] summary {
+    margin-bottom: 8px;
+}
+
+.totals-sub {
+    margin: 22px 0 8px;
+    font-size: 16px;
+    font-weight: 800;
+}

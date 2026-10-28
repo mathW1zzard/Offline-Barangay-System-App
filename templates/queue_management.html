@@ -4,10 +4,11 @@
 {% block page_title %}Queue Management{% endblock %}
 {% block page_subtitle %}Live counter{% endblock %}
 {% block description %}To display the tickets queue{% endblock %}
-{% if message %}
-<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}" role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
-{% endif %}
 {% block content %}
+{% if message %}
+<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}"
+    role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
+{% endif %}
 <!--LIVE PANEL-->
 <section class="live-panel">
     <!--NOW SERVING-->
@@ -23,15 +24,21 @@
             <div class="serving-person">
                 <p class="label">Current Visitor Name</p>
                 <h3>{{ current_ticket.citizen_name }}</h3>
-                <p class="hint">Requested service: <strong class="service-name">{{ current_ticket.service_label }}</strong></p>
+                <p class="hint">Requested service: <strong class="service-name">{{ current_ticket.service_label
+                        }}</strong></p>
+                {% if prepare %}<p class="hint">Document: <strong>{{ prepare.name }}</strong></p>{% endif %}
             </div>
         </div>
 
         <div class="serving-actions">
+            {% if prepare %}
+            <a class="btn btn-primary" href="{{ prepare.url }}"
+                title="Opens {{ prepare.name }} with this visitor's details filled in">{{ icon('file-text', 18) }}
+                Prepare document</a>
+            {% endif %}
             <form action="/complete/{{ current_ticket.id }}" method="post">
                 <button type="submit" class="btn btn-success" data-confirm
-                    data-action="/complete/{{ current_ticket.id }}" 
-                    data-title="Mark as complete?"
+                    data-action="/complete/{{ current_ticket.id }}" data-title="Mark as complete?"
                     data-message="{{ current_ticket.ticket_number }} ({{ current_ticket.citizen_name }}) has been served. This is saved to attendance history and cannot be undone."
                     data-label="Mark complete" data-variant="success">{{ icon('check', 18) }} Mark complete</button>
             </form>
@@ -48,8 +55,8 @@
             <p class="idle-message">{% if upcomming %}Nobody is at the counter. Call the next visitor when you are
                 ready.{% else %}Nobody is at the counter and nobody is waiting.{% endif %}</p>
             {% if upcomming %}
-            <button type="button" class="btn btn-primary btn-xl" data-confirm data-action="/call-next/{{ upcomming[0].id }}"
-                data-title="Call the next visitor?"
+            <button type="button" class="btn btn-primary btn-xl" data-confirm
+                data-action="/call-next/{{ upcomming[0].id }}" data-title="Call the next visitor?"
                 data-message="{{ upcomming[0].ticket_number }} ({{ upcomming[0].citizen_name }}) will be called to the counter and the announcement will play."
                 data-label="Call {{ upcomming[0].ticket_number }}">{{ icon('bell', 22) }} Call next</button>
             {% else %}
@@ -171,7 +178,6 @@
     if (announcementClips.length > 0) {
         playAnnouncement();
     }
-    
+
 </script>
 {% endblock %}
-

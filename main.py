@@ -12,6 +12,7 @@ from database import SessionLocal, Ticket, Service, Visit, Admin, AdminLog, engi
 from paths import resource_path, data_path
 import branding
 import doc_templates
+import documents
 from datetime import datetime, date, time, timedelta
 from starlette.middleware.sessions import SessionMiddleware
 from enum import Enum
@@ -35,7 +36,7 @@ import math
 import re
 import os
 from time import monotonic          
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import IntegrityError
 
@@ -1252,6 +1253,13 @@ def show_queue(request: Request):
                 
         total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
         
+                # "Prepare document": only when the visitor's service is linked to a document that is turned on
+        prepare = None
+        linked_id = current_ticket.service.document_template_id if current_ticket and current_ticket.service else None
+        linked = db.get(DocumentTemplate, linked_id) if linked_id else None
+        if linked and linked.is_active:
+            prepare = {"url": f"/documents/issue/{linked.id}?ticket={current_ticket.id}", "name": linked.name}
+            
         announce = request.session.pop("announce", None)        # one-shot: gone after this page load
         announce_clips = build_announcement_clips(announce) if announce else []      
               
@@ -1268,7 +1276,8 @@ def show_queue(request: Request):
             "current_ticket": current_ticket,
             "upcomming": upcomming,
             "announcement_clips": announce_clips,
-            "message": message
+            "message": message,
+            "prepare": prepare
         })
         
         return response
@@ -1655,46 +1664,73 @@ def service_name_error(db, name: str, exclude_id: int | None = None) -> str | No
         q = q.filter(Service.id != exclude_id)
     return f'A service named "{name}" already exists.' if q.first() else None
 
+def active_template_choices(db) -> list:
+    """The documents a service can be linked to: only ones that are turned on."""
+    return [{"id": t.id, "name": t.name} for t in
+            db.query(DocumentTemplate).filter(DocumentTemplate.is_active.is_(True)).order_by(DocumentTemplate.id).all()]
+
+def read_document_choice(db, value: str):
+    """The 'Document to issue' dropdown. Returns (template id or None, error message or None)."""
+    if not (value or "").strip():
+        return None, None                                   # "None": no Prepare document button
+    template_id = parse_optional_int(value)
+    row = db.get(DocumentTemplate, template_id) if template_id else None
+    if row is None or not row.is_active:
+        return None, "That document is turned off or was removed. Choose another one, or None. Nothing was saved."
+    return row.id, None
+
+def template_name_of(db, template_id) -> str:
+    row = db.get(DocumentTemplate, template_id) if template_id else None
+    return row.name if row else "None"
+
 @app.get("/services", dependencies=[Depends(login_required)])
 def list_services(request: Request):
     message = request.session.pop("flash", None)
-    
+
     with SessionLocal() as db:
         services = db.query(Service).all()
         today_start = datetime.combine(date.today(), datetime.min.time())
-                    
+
         total_today = db.query(Ticket).filter(Ticket.created_at >= today_start).count()
+        doc_names = {t.id: t.name for t in db.query(DocumentTemplate).all()}
         return templates.TemplateResponse(request, "services.html", {
-            
+
             "services": services,
             "total_today": total_today,
-            "message": message
-            
+            "message": message,
+            "template_choices": active_template_choices(db),
+            "doc_names": doc_names,
+
         })
 
 @app.post("/services/add", dependencies=[Depends(login_required)])
-def add_services(request: Request, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status")):
+def add_services(request: Request, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status"),
+                 document_template_id: str = Form("")):
     name = clean_text(service_name, 80)
     with SessionLocal() as db:
         error = service_name_error(db, name)
-        if error:
-            flash(request, False, error)
+        template_id, doc_error = read_document_choice(db, document_template_id)
+        if error or doc_error:
+            flash(request, False, error or doc_error)
             return RedirectResponse(url="/services", status_code=303)
-        db.add(Service(service_name=name, service_status=service_status.value))
+        db.add(Service(service_name=name, service_status=service_status.value, document_template_id=template_id))
         db.commit()
-    log_action("Service", "Service Added", f"Added service: {name} ({service_status.value})", request)
+        doc_note = f"; document: {template_name_of(db, template_id)}" if template_id else ""
+    log_action("Service", "Service Added", f"Added service: {name} ({service_status.value}){doc_note}", request)
     return RedirectResponse(url="/services", status_code=303)
 
 @app.post("/services/edit/{service_id}", dependencies=[Depends(login_required)])
-def edit_service(request: Request, service_id: int, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status")):
+def edit_service(request: Request, service_id: int, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status"),
+                 document_template_id: str = Form("")):
     changes = []
     name = clean_text(service_name, 80)
     with SessionLocal() as db:
         service = db.get(Service, service_id)
         error = service_name_error(db, name, exclude_id=service_id)
-        
-        if error:
-            flash(request, False, error)
+        template_id, doc_error = read_document_choice(db, document_template_id)
+
+        if error or doc_error:
+            flash(request, False, error or doc_error)
             return RedirectResponse(url="/services", status_code=303)
 
         if service:
@@ -1702,8 +1738,11 @@ def edit_service(request: Request, service_id: int, service_name: str = Form(...
                 changes.append(f'renamed from "{service.service_name}"')
             if service.service_status != service_status.value:
                 changes.append(f"status {service.service_status} -> {service_status.value}")
+            if service.document_template_id != template_id:
+                changes.append(f"document {template_name_of(db, service.document_template_id)} -> {template_name_of(db, template_id)}")
             service.service_name = name
             service.service_status = service_status.value
+            service.document_template_id = template_id
             db.commit()
     if changes:   # saving the form without changing anything is not worth a log row
         log_action("Service", "Service Modified", f'Modified service "{name}": ' + "; ".join(changes), request)
@@ -2222,11 +2261,6 @@ def template_views(db) -> list:
         "services": linked.get(r.id, []), "active": bool(r.is_active),
     } for r in db.query(DocumentTemplate).order_by(DocumentTemplate.id).all()]
 
-@app.get("/documents", dependencies=[Depends(admin_required)])
-def documents_home():
-    # The "Issue a document" tab arrives in the next step. Until then Documents opens on Templates.
-    return RedirectResponse(url="/documents/templates", status_code=303)
-
 @app.get("/documents/templates", dependencies=[Depends(admin_required)])
 def show_templates(request: Request):
     message = request.session.pop("flash", None)
@@ -2458,6 +2492,375 @@ def delete_template(request: Request, template_id: int):
                 entry = ("Template Turned Off", f'"{name}" gained issued documents, so it was turned off instead')
     log_action("Documents", entry[0], entry[1], request)
     return RedirectResponse(url="/documents/templates", status_code=303)
+
+# DOCUMENTS: ISSUING (the picker, the form, the print page) AND THE HISTORY
+def signatories_missing(b: dict) -> bool:
+    """Documents carry both signature lines, so both names must be set before anything is issued."""
+    return not (b["captain_name"] and b["secretary_name"])
+
+def carry_params(client_name: str, address: str, ticket_number: str, ticket_date: str) -> dict:
+    """What 'Choose another document' keeps. Cleaned again, because it came from the address bar."""
+    carry = {"client_name": clean_text(client_name, 100), "address": clean_text(address, 150)}
+    if TICKET_RE.match(ticket_number or "") and parse_date(ticket_date):
+        carry["ticket_number"], carry["ticket_date"] = ticket_number, ticket_date
+    return {k: v for k, v in carry.items() if v}
+
+def issue_control_number(db, prefix: str, year: int, style: str) -> str:
+    """Next control number, like BC-2026-0001. Same upsert as ticket numbers: it takes SQLite's write
+    lock, held until the document is saved, so two people never get one number, and a failed save
+    rolls the number back (no gaps)."""
+    n = db.execute(text("""
+        INSERT INTO document_counters (prefix, year, last_number) VALUES (:prefix, :year, 1)
+        ON CONFLICT (prefix, year) DO UPDATE SET last_number = last_number + 1
+        RETURNING last_number"""), {"prefix": prefix, "year": year}).scalar_one()
+    return branding.format_control_number(style, prefix, year, n)
+
+def safe_back(back: str) -> str:
+    """After voiding or adding an OR number she returns to her filtered list, never to another site."""
+    return back if back.startswith("/documents/history") else "/documents/history"
+
+# ---- the picker (the "Issue a document" tab)
+@app.get("/documents", dependencies=[Depends(login_required)])
+def documents_picker(request: Request, client_name: str = "", address: str = "",
+                     ticket_number: str = "", ticket_date: str = ""):
+    carry = carry_params(client_name, address, ticket_number, ticket_date)
+    message = request.session.pop("flash", None)
+    with SessionLocal() as db:
+        items = [{"id": t.id, "name": t.name,
+                  "fee_text": doc_templates.format_pesos(t.default_fee_centavos) if t.default_fee_centavos else "No fee"}
+                 for t in db.query(DocumentTemplate).filter(DocumentTemplate.is_active.is_(True))
+                              .order_by(DocumentTemplate.id).all()]
+    return templates.TemplateResponse(request, "documents_issue.html", {
+        "items": items, "message": message, "client_name": carry.get("client_name", ""),
+        "suffix": ("?" + urlencode(carry)) if carry else "",
+        "names_missing": signatories_missing(branding.get_branding()),
+    })
+
+# ---- the issue form
+def render_issue_form(request: Request, row, form: dict, ticket_number: str, ticket_date: str, copy_of: str,
+                      error: str | None = None, status_code: int = 200):
+    token = secrets.token_urlsafe(16)               # one use only: a second press of Print, or Back, cannot issue twice
+    request.session["issue_token"] = token
+    used = doc_templates.fields_used(effective_body(row))
+    return templates.TemplateResponse(request, "document_form.html", {
+        "t": {"id": row.id, "name": row.name, "extras": [e for e in row.extras.split(",") if e]},
+        "shown": form, "error": error, "token": token, "today": date.today().isoformat(),
+        "civil_statuses": documents.CIVIL_STATUSES,
+        "required": {"address": "Address" in used, "purpose": "Purpose" in used},
+        "ticket_number": ticket_number, "ticket_date": ticket_date, "copy_of": copy_of,
+        "names_missing": signatories_missing(branding.get_branding()),
+    }, status_code=status_code)
+
+def voided_original(db, copy_of: str, template_id: int):
+    """The voided document a corrected copy is made from (None if it is not a voided one of this template)."""
+    original = db.get(IssuedDocument, parse_optional_int(copy_of)) if parse_optional_int(copy_of) else None
+    if original and original.status == "voided" and original.template_id == template_id:
+        return original
+    return None
+
+@app.get("/documents/issue/{template_id}", dependencies=[Depends(login_required)])
+def issue_form(request: Request, template_id: int, client_name: str = "", address: str = "", ticket: str = "",
+               ticket_number: str = "", ticket_date: str = "", copy_of: str = ""):
+    with SessionLocal() as db:
+        row = db.get(DocumentTemplate, template_id)
+        if row is None:
+            return RedirectResponse(url="/documents", status_code=303)
+        original = voided_original(db, copy_of, template_id)
+        if not row.is_active and original is None:
+            flash(request, False, f'"{row.name}" is turned off. Choose another document.')
+            return RedirectResponse(url="/documents", status_code=303)
+
+        carry = carry_params(client_name, address, ticket_number, ticket_date)
+        ticket_id = parse_optional_int(ticket)
+        queued = db.get(Ticket, ticket_id) if ticket_id else None
+        if queued:                                   # opened from the queue: copy the visitor's details
+            carry.setdefault("client_name", queued.citizen_name)
+            if queued.address:
+                carry.setdefault("address", queued.address)
+            carry["ticket_number"], carry["ticket_date"] = queued.ticket_number, queued.created_at.date().isoformat()
+
+        form = {"client_name": carry.get("client_name", ""), "address": carry.get("address", ""), "purpose": "",
+                "issue_date": date.today().isoformat(), "age": "", "civil_status": "", "years": "",
+                "fee": doc_templates.format_fee_input(row.default_fee_centavos), "or_choice": "", "or_number": ""}
+        if original:                                 # a corrected copy starts from the voided one (dated today)
+            old = documents.from_json(original.extras, {})
+            form.update({"client_name": original.recipient, "address": original.address or "",
+                         "purpose": original.purpose or "", "age": old.get("age", ""),
+                         "civil_status": old.get("civil_status", ""), "years": old.get("years", ""),
+                         "fee": doc_templates.format_fee_input(original.fee_centavos),
+                         "or_choice": {"provided": "enter", "not_available": "none"}.get(original.or_status, ""),
+                         "or_number": original.or_number or ""})
+            carry["ticket_number"], carry["ticket_date"] = original.ticket_number or "", (
+                original.ticket_date.isoformat() if original.ticket_date else "")
+        return render_issue_form(request, row, form, carry.get("ticket_number", ""), carry.get("ticket_date", ""),
+                                 str(original.id) if original else "")
+
+@app.post("/documents/issue/{template_id}/preview", dependencies=[Depends(login_required)])
+def preview_issue(template_id: int, client_name: str = Form(""), address: str = Form(""), purpose: str = Form(""),
+                  issue_date: str = Form(""), age: str = Form(""), civil_status: str = Form(""),
+                  years: str = Form(""), fee: str = Form(""), or_choice: str = Form(""), or_number: str = Form("")):
+    """The live preview next to the form: the same code that prints, with a [Field name] where
+    something is not typed yet. Saves nothing and uses no control number."""
+    with SessionLocal() as db:
+        row = db.get(DocumentTemplate, template_id)
+        if row is None:
+            return JSONResponse({"paragraphs": [], "fee_line": None})
+        body, months, print_fee = effective_body(row), row.validity_months, bool(row.print_fee)
+    try:
+        when = documents.parse_issue_date(issue_date, date.today())
+    except documents.IssueError:
+        when = date.today()
+    try:
+        fee_centavos = doc_templates.parse_fee(fee)
+    except ValueError:
+        fee_centavos = 0
+    number = clean_text(or_number, 40) if or_choice == documents.OR_ENTER and fee_centavos > 0 else ""
+    b = branding.get_branding()
+    entry = {"client_name": clean_text(client_name, 100) or "[Client name]",
+             "address": clean_text(address, 150) or "[Address]", "purpose": clean_text(purpose, 150) or "[Purpose]",
+             "issue_date": when, "fee_centavos": fee_centavos, "or_number": number or None,
+             "extras": {"age": clean_text(age, 3) or "[Age]", "civil_status": clean_text(civil_status, 20) or "[Civil status]",
+                        "years": clean_text(years, 3) or "[Years of residence]"}}
+    paragraphs = doc_templates.render_paragraphs(body, documents.values_for(entry, b, months))
+    return JSONResponse({"paragraphs": paragraphs,
+                         "fee_line": documents.fee_line(fee_centavos, "provided" if number else "not_available", number, print_fee)})
+
+@app.post("/documents/issue/{template_id}", dependencies=[Depends(login_required)])
+def issue_document(request: Request, template_id: int, issue_token: str = Form(""),
+                   client_name: str = Form(""), address: str = Form(""), purpose: str = Form(""),
+                   issue_date: str = Form(""), age: str = Form(""), civil_status: str = Form(""),
+                   years: str = Form(""), fee: str = Form(""), or_choice: str = Form(""), or_number: str = Form(""),
+                   ticket_number: str = Form(""), ticket_date: str = Form(""), copy_of: str = Form("")):
+    expected = request.session.pop("issue_token", None)
+    if not expected or not secrets.compare_digest(expected, issue_token):
+        flash(request, False, "That form was already used or has expired, so nothing was saved. Please start again.")
+        return RedirectResponse(url="/documents", status_code=303)
+
+    ticket_number = ticket_number if TICKET_RE.match(ticket_number) else ""
+    ticket_day = parse_date(ticket_date) if ticket_number else None
+    raw = {"client_name": clean_text(client_name, 100), "address": clean_text(address, 150),
+           "purpose": clean_text(purpose, 150), "issue_date": issue_date.strip(), "age": age.strip(),
+           "civil_status": civil_status.strip(), "years": years.strip(), "fee": fee.strip(),
+           "or_choice": or_choice.strip(), "or_number": clean_text(or_number, 40)}
+    b = branding.get_branding()
+    with SessionLocal() as db:
+        row = db.get(DocumentTemplate, template_id)
+        if row is None:
+            return RedirectResponse(url="/documents", status_code=303)
+        original = voided_original(db, copy_of, template_id)
+        if not row.is_active and original is None:
+            flash(request, False, f'"{row.name}" is turned off. Choose another document.')
+            return RedirectResponse(url="/documents", status_code=303)
+        corrected_of = original.control_number if original else None     # read now: the session closes below
+
+        def fail(message: str):
+            return render_issue_form(request, row, raw, ticket_number, ticket_date if ticket_day else "",
+                                     str(original.id) if original else "", message, 400)
+
+        if signatories_missing(b):
+            return fail("The names of the Barangay Captain and Secretary are not set. Fill them in under Settings, then try again.")
+        body = effective_body(row)
+        extras = [e for e in row.extras.split(",") if e]
+        problem = doc_templates.validate_body(body, doc_templates.available_fields(extras, row.validity_months is not None))
+        if problem:
+            return fail(f"The wording of this document has a problem, so it cannot be issued: {problem} Fix it under Templates.")
+        try:
+            entry = documents.read_issue_form(raw, body=body, extras=extras, today=date.today())
+        except documents.IssueError as e:
+            return fail(str(e))
+
+        paragraphs = doc_templates.render_paragraphs(body, documents.values_for(entry, b, row.validity_months))
+        admin = get_current_admin(request)
+        try:
+            number = issue_control_number(db, row.code_prefix, date.today().year, b["control_number_format"])
+            record = IssuedDocument(
+                control_number=number, template_id=row.id, template_name=row.name, recipient=entry["client_name"],
+                address=entry["address"] or None, purpose=entry["purpose"] or None, issue_date=entry["issue_date"],
+                extras=documents.to_json(entry["extras"]), fee_centavos=entry["fee_centavos"],
+                or_number=entry["or_number"], or_status=entry["or_status"],
+                final_text=documents.to_json(paragraphs),                      # frozen: a later template edit never changes it
+                print_snapshot=documents.to_json(documents.make_snapshot(b, row.print_fee)),
+                issued_by=admin.username if admin else "unknown",
+                ticket_number=ticket_number or None, ticket_date=ticket_day, status="issued",
+                created_at=datetime.now())
+            db.add(record)
+            db.commit()
+            record_id, record_number, template_name = record.id, number, row.name
+        except IntegrityError:
+            db.rollback()
+            log.exception("Saving an issued document failed")
+            return fail("The document could not be saved. Nothing was printed. Please try again.")
+
+    note = f"; fee {doc_templates.format_pesos(entry['fee_centavos'])} ({entry['or_status'].replace('_', ' ')})" if entry["fee_centavos"] else ""
+    if corrected_of:
+        note += f"; corrected copy of {corrected_of}"
+    log_action("Documents", "Document Issued", f'Issued {record_number} ({template_name}) for {entry["client_name"]}{note}', request)
+    return RedirectResponse(url=f"/documents/issued/{record_id}/print?first=1", status_code=303)
+
+# ---- the print page (first print, and reprints)
+@app.get("/documents/issued/{doc_id}/print", dependencies=[Depends(login_required)])
+def print_document(request: Request, doc_id: int, first: str = ""):
+    b = branding.get_branding()
+    with SessionLocal() as db:
+        rec = db.get(IssuedDocument, doc_id)
+        if rec is None:
+            return RedirectResponse(url="/documents/history", status_code=303)
+        snapshot = documents.from_json(rec.print_snapshot, {})
+        view = {"control_number": rec.control_number, "template_name": rec.template_name,
+                "void_reason": rec.void_reason, "issue_date_text": rec.issue_date.strftime("%b %d, %Y")}
+        voided, has_ticket = rec.status == "voided", rec.ticket_number is not None
+        paragraphs = documents.from_json(rec.final_text, [])
+        fee_text = documents.fee_line(rec.fee_centavos, rec.or_status, rec.or_number, snapshot.get("print_fee", True))
+    is_first = first == "1" and not voided
+    if not is_first and not voided:
+        log_action("Documents", "Document Reprinted", f"Opened {view['control_number']} for printing", request)
+    return templates.TemplateResponse(request, "document_print.html", {
+        "rec": view, "voided": voided, "first": is_first, "has_ticket": has_ticket,
+        "paragraphs": paragraphs, "fee_line": fee_text,
+        # Names and header lines come from the saved copy (as issued); the logos are today's
+        "hdr": {"full_name": snapshot.get("full_name", b["full_name"]),
+                "header_line_1": snapshot.get("header_line_1", b["header_line_1"]),
+                "header_line_2": snapshot.get("header_line_2", b["header_line_2"]), "logos": b["logos"]},
+        "signers": {k: snapshot.get(k, b[k]) for k in ("captain_name", "captain_title", "secretary_name", "secretary_title")},
+        "paper_css": branding.PAPER_CSS.get(b["paper_size"], "A4"),
+    })
+    
+# ---- the history (the "Issued documents" tab)
+def history_query(db, d_from, d_to, template_id, status, receipt, q):
+    query = db.query(IssuedDocument).filter(IssuedDocument.issue_date >= d_from, IssuedDocument.issue_date <= d_to)
+    if template_id:
+        query = query.filter(IssuedDocument.template_id == template_id)
+    if status:
+        query = query.filter(IssuedDocument.status == status)
+    if receipt == "no_or":
+        query = query.filter(IssuedDocument.or_status == "not_available")
+    if q:
+        like = like_pattern(q)
+        query = query.filter(IssuedDocument.control_number.ilike(like, escape="\\")
+                             | IssuedDocument.recipient.ilike(like, escape="\\"))
+    return query
+
+def history_filters(date_from, date_to, template_id, status, receipt):
+    d_from, d_to = documents.history_range(date_from, date_to, date.today())
+    return (d_from, d_to, parse_optional_int(template_id), status if status in ("issued", "voided") else "",
+            "no_or" if receipt == "no_or" else "")
+
+@app.get("/documents/history", dependencies=[Depends(login_required)])
+def documents_history(request: Request, date_from: str = "", date_to: str = "", template_id: str = "",
+                      status: str = "", receipt: str = "", q: str = "", page: str = "1"):
+    d_from, d_to, tid, status, receipt = history_filters(date_from, date_to, template_id, status, receipt)
+    message = request.session.pop("flash", None)
+    with SessionLocal() as db:
+        base = history_query(db, d_from, d_to, tid, status, receipt, q)
+
+        # Totals leave voided documents out. They follow the filters, like the list.
+        live = base.filter(IssuedDocument.status == "issued")
+        fees = func.coalesce(func.sum(IssuedDocument.fee_centavos), 0)
+        issued_count, fees_total = live.with_entities(func.count(IssuedDocument.id), fees).one()
+        no_or_count, no_or_total = live.filter(IssuedDocument.or_status == "not_available") \
+            .with_entities(func.count(IssuedDocument.id), fees).one()
+        money = doc_templates.format_pesos
+        by_day = live.with_entities(IssuedDocument.issue_date, IssuedDocument.template_name,
+                                    func.count(IssuedDocument.id), fees) \
+            .group_by(IssuedDocument.issue_date, IssuedDocument.template_name) \
+            .order_by(IssuedDocument.issue_date.desc(), IssuedDocument.template_name).all()
+        by_template = live.with_entities(IssuedDocument.template_name, func.count(IssuedDocument.id), fees) \
+            .group_by(IssuedDocument.template_name).order_by(IssuedDocument.template_name).all()
+        totals = {
+            "issued_count": issued_count, "fees_text": money(fees_total),
+            "voided_count": base.filter(IssuedDocument.status == "voided").count(),
+            "no_or_count": no_or_count, "no_or_text": money(no_or_total),
+            "by_day": [{"date_text": d.strftime("%b %d, %Y"), "template_name": n, "count": c, "fees_text": money(f)}
+                       for d, n, c, f in by_day],
+            "by_template": [{"template_name": n, "count": c, "fees_text": money(f)} for n, c, f in by_template],
+        }
+
+        total_records = base.count()
+        page_number = parse_optional_int(page) or 1
+        total_pages = max(1, math.ceil(total_records / PAGE_SIZE))
+        page_number = max(1, min(page_number, total_pages))
+        records = (base.order_by(IssuedDocument.created_at.desc(), IssuedDocument.id.desc())
+                   .offset((page_number - 1) * PAGE_SIZE).limit(PAGE_SIZE).all())
+        rows = [{"id": r.id, "control_number": r.control_number, "template_id": r.template_id,
+                 "template_name": r.template_name, "recipient": r.recipient, "address": r.address,
+                 "issue_date_text": r.issue_date.strftime("%m/%d/%Y"),
+                 "fee_text": money(r.fee_centavos) if r.fee_centavos else "No fee",
+                 "or_status": r.or_status, "or_number": r.or_number, "voided": r.status == "voided"} for r in records]
+        template_choices = [{"id": t.id, "name": t.name} for t in db.query(DocumentTemplate).order_by(DocumentTemplate.id).all()]
+
+    return templates.TemplateResponse(request, "documents_history.html", {
+        "rows": rows, "totals": totals, "message": message, "template_choices": template_choices,
+        "date_from": d_from.isoformat(), "date_to": d_to.isoformat(), "template_id": tid,
+        "status": status, "receipt": receipt, "search": q,
+        "page": page_number, "total_pages": total_pages, "total_records": total_records,
+        "start_record": (page_number - 1) * PAGE_SIZE + 1 if total_records else 0,
+        "end_record": min(page_number * PAGE_SIZE, total_records),
+        "back": str(request.url.path) + (("?" + request.url.query) if request.url.query else ""),
+    })
+
+@app.get("/documents/history/export", dependencies=[Depends(login_required)])
+def documents_export(request: Request, date_from: str = "", date_to: str = "", template_id: str = "",
+                     status: str = "", receipt: str = "", q: str = ""):
+    """The list as a CSV file: same filters as the page, with the fee, OR number and OR status."""
+    d_from, d_to, tid, status, receipt = history_filters(date_from, date_to, template_id, status, receipt)
+    with SessionLocal() as db:
+        records = history_query(db, d_from, d_to, tid, status, receipt, q) \
+            .order_by(IssuedDocument.issue_date, IssuedDocument.id).all()
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(["Control number", "Date", "Document", "Client name", "Address", "Purpose", "Fee (PHP)",
+                         "Receipt status", "OR number", "Issued by", "Status", "Void reason"])
+        for r in records:
+            writer.writerow([csv_safe(r.control_number), r.issue_date.strftime("%m/%d/%Y"), csv_safe(r.template_name),
+                             csv_safe(r.recipient), csv_safe(r.address), csv_safe(r.purpose),
+                             documents.pesos_plain(r.fee_centavos), r.or_status.replace("_", " ").title(),
+                             csv_safe(r.or_number), csv_safe(r.issued_by), r.status.title(), csv_safe(r.void_reason)])
+    log_action("Documents", "CSV Export",
+               f"Exported {len(records)} issued document(s) for {range_label(d_from, d_to)}", request)
+    return Response(
+        content="\ufeff" + buffer.getvalue(),            # BOM so Excel reads UTF-8 names correctly
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="issued_documents_{d_from}_to_{d_to}.csv"'})
+    
+# ---- void, and adding a missing OR number
+@app.post("/documents/issued/{doc_id}/void", dependencies=[Depends(login_required)])
+def void_document(request: Request, doc_id: int, reason: str = Form(""), back: str = Form("")):
+    reason = clean_text(reason, 200)
+    if not reason:
+        flash(request, False, "Please type why the document is being voided. Nothing was changed.")
+        return RedirectResponse(url=safe_back(back), status_code=303)
+    with SessionLocal() as db:
+        # One atomic change: if two clicks arrive together, only one of them voids it
+        changed = db.query(IssuedDocument).filter(IssuedDocument.id == doc_id, IssuedDocument.status == "issued") \
+            .update({"status": "voided", "void_reason": reason}, synchronize_session=False)
+        db.commit()
+        number = db.query(IssuedDocument.control_number).filter(IssuedDocument.id == doc_id).scalar() if changed == 1 else None
+    if number:
+        log_action("Documents", "Document Voided", f"Voided {number}: {reason}", request)
+        flash(request, True, f"{number} was voided. Use Issue a corrected copy to make a new one.")
+    else:
+        flash(request, False, "That document could not be voided. It may already be voided.")
+    return RedirectResponse(url=safe_back(back), status_code=303)
+
+@app.post("/documents/issued/{doc_id}/or", dependencies=[Depends(login_required)])
+def add_or_number(request: Request, doc_id: int, or_number: str = Form(""), back: str = Form("")):
+    """A receipt number that was missing at issue time. The certificate text is not touched."""
+    number_typed = clean_text(or_number, 40)
+    if not number_typed:
+        flash(request, False, "Please type the OR number. Nothing was changed.")
+        return RedirectResponse(url=safe_back(back), status_code=303)
+    with SessionLocal() as db:
+        changed = db.query(IssuedDocument).filter(
+            IssuedDocument.id == doc_id, IssuedDocument.status == "issued", IssuedDocument.or_status == "not_available") \
+            .update({"or_number": number_typed, "or_status": "provided"}, synchronize_session=False)
+        db.commit()
+        number = db.query(IssuedDocument.control_number).filter(IssuedDocument.id == doc_id).scalar() if changed == 1 else None
+    if number:
+        log_action("Documents", "OR Number Added", f"Added OR number {number_typed} to {number}", request)
+        flash(request, True, f"The OR number was added to {number}.")
+    else:
+        flash(request, False, "The OR number could not be added. The document may be voided or already have one.")
+    return RedirectResponse(url=safe_back(back), status_code=303)
 
 
 # ABOUT
