@@ -2,7 +2,7 @@
 {% from "_macros.html" import icon %}
 {% block title %}About{% endblock %}
 {% block page_title %}About{% endblock %}
-{% block description %}About the Barangay Queuing and Attendance Management System{% endblock %}
+{% block description %}About {{ app_title }}{% endblock %}
 {% block page_subtitle %}About the system{% endblock %}
 
 {% block head %}
@@ -197,7 +197,7 @@
 <!-- 1. ABOUT THE SYSTEM -->
 <section class="card">
     <h2 class="card-title">{{ icon('info', 22) }} About the System</h2>
-    <h3 class="about-name">Barangay Queuing and Attendance Management System</h3>
+    <h3 class="about-name">{{ app_title }}</h3>
     <div class="about-meta">
         <span class="count-pill">Version 1.0.1</span>
         <span class="hint">2026</span>

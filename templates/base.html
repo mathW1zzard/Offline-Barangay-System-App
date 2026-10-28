@@ -6,7 +6,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}{% endblock %} | Barangay Queuing and Attendance Management</title>
+    <title>{% block title %}{% endblock %} | {{ app_title }}</title>
     <meta name="description" content="{% block description %}{% endblock %}">
     <link rel="stylesheet" href="/static/style.css">
     {% block head %}{% endblock %}
@@ -19,7 +19,7 @@
             <div class="brand">
                 <div class="brand-icon">{{ icon('app-icon', 24) }}</div>
                 <div class="brand-text">
-                    <h2>Barangay System</h2>
+                    <h2>{{ app_title }}</h2>
                     <p>{{ barangay_name }}</p>
                 </div>
             </div>

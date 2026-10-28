@@ -13,7 +13,7 @@ setup_logging()   # first, so even an error while importing main is recorded
 from paths import resource_path, DATA_DIR
 
 STARTUP_TIMEOUT = 30.0
-
+APP_TITLE = "Barangay System"
 
 def start_server():
     """Create the listening socket here and hand it to uvicorn, so no other program can grab
@@ -48,13 +48,13 @@ def acquire_single_instance() -> bool:
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
     k32.CreateMutexW.restype = ctypes.c_void_p
     k32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
-    _instance_handle = k32.CreateMutexW(None, False, "Local\\Barangay_Queuing_Attendance_Management_SingleInstance")
+    _instance_handle = k32.CreateMutexW(None, False, "Local\\Barangay_System_SingleInstance")
     return ctypes.get_last_error() != _ERROR_ALREADY_EXISTS
 
 if not acquire_single_instance():
     log.warning("A second copy was started and closed itself")
-    ctypes.windll.user32.MessageBoxW(None, "The Barangay Queuing and Attendance Management System is already running.",
-                                     "Barangay Queuing and Attendance Management", 0x40)
+    ctypes.windll.user32.MessageBoxW(None, f"{APP_TITLE} is already running.",
+                                    APP_TITLE, 0x40)
     sys.exit(0)
 
 import main 
@@ -67,7 +67,7 @@ if __name__ == "__main__":
 
     if not wait_until_started(server, thread):
         log.error("The server did not start (see the errors above in app.log)")
-        webview.create_window("Barangay Queuing and Attendance Management",
+        webview.create_window(APP_TITLE,
                               html="<h2 style='font-family:sans-serif'>The application could not start.</h2>"
                                    "<p style='font-family:sans-serif'>Please contact the system administrator. "
                                    "Details are in app.log.</p>", width=600, height=300)
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     if hasattr(webview, "settings"):
         webview.settings["ALLOW_DOWNLOADS"] = True
 
-    webview.create_window("Barangay Queuing and Attendance Management", url, width=1200, height=800)
+    webview.create_window(APP_TITLE, url, width=1200, height=800)
     
     display_window = None
     def open_display():

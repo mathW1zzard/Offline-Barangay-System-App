@@ -97,7 +97,6 @@ templates = Jinja2Templates(directory=resource_path("templates"), context_proces
 
 APP_TITLE = "Barangay System"                 # the name people see; change it here only
 templates.env.globals["app_title"] = APP_TITLE
-
 PAGE_SIZE = 15
 
 def render_registration(request: Request, error: str | None = None, form: dict | None = None, status_code: int = 200):

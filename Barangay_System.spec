@@ -17,7 +17,7 @@ datas = [
     ("static", "static"),          # includes static/fonts and static/audio
     ("app_icon.ico", "."),
 ]
-# python-escpos reads capabilities.json when a printer object is created (even Dummy)
+
 datas += collect_data_files("escpos")
 
 a = Analysis(
@@ -38,7 +38,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Barangay_Queuing_Attendance_Management",
+    name="Barangay_System",
     icon="app_icon.ico",
     console=False,      # no black console window
     upx=False,          # UPX makes antivirus false alarms more likely
@@ -49,5 +49,5 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     upx=False,
-    name="Barangay_Queuing_Attendance_Management",
+    name="Barangay_System",
 )
