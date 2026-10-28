@@ -28,6 +28,13 @@
             </div>
 
             <div class="field">
+                <label for="address">Address (Purok / Street) <span class="hint">(optional)</span></label>
+                <input type="text" name="address" id="address" value="{{ form.address if form else '' }}"
+                    maxlength="150" autocomplete="off">
+                <p class="hint">Saved with the visit and used on documents. It is never printed on the queue slip or shown on the display.</p>
+            </div>
+
+            <div class="field">
                 <label for="service_id">Requested service</label>
                 <select name="service_id" id="service_id" required {% if not active_services %}disabled{% endif %}>
                     {% for service in active_services %}
@@ -52,7 +59,7 @@
                         <span class="lane-dot" aria-hidden="true"></span>
                     </label>
                     <label class="lane-card">
-                        <input type="radio" name="lane" value="R" checked {{ 'checked' if form and form.lane == 'P' }}>
+                        <input type="radio" name="lane" value="R" {{ 'checked' if not form or form.lane != 'P' }}>
                         <span class="lane-card-text">
                             <span class="lane-card-title">Regular</span>
                             <span class="lane-card-desc">All other walk-in visitors</span>
@@ -152,6 +159,7 @@
         </p>
         <dl class="confirm-summary">
             <dt>Client</dt><dd id="rc-name"></dd>
+            <dt>Address</dt><dd id="rc-address"></dd>
             <dt>Service</dt><dd id="rc-service"></dd>
             <dt>Lane</dt><dd id="rc-lane"></dd>
         </dl>
@@ -183,6 +191,7 @@
             const lane = form.querySelector('input[name="lane"]:checked');
             // textContent, never innerHTML: the name is user input
             document.getElementById('rc-name').textContent = form.elements['citizen_name'].value.trim().replace(/\s+/g, ' ');
+            document.getElementById('rc-address').textContent = form.elements['address'].value.trim().replace(/\s+/g, ' ') || 'Not given';
             document.getElementById('rc-service').textContent = service.selectedIndex >= 0 ? service.options[service.selectedIndex].text : '';
             document.getElementById('rc-lane').textContent = lane && lane.value === 'P' ? 'Priority' : 'Regular';
             dialog.showModal();

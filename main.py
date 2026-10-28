@@ -95,6 +95,9 @@ def branding_context(request: Request) -> dict:
 
 templates = Jinja2Templates(directory=resource_path("templates"), context_processors=[branding_context])
 
+APP_TITLE = "Barangay System"                 # the name people see; change it here only
+templates.env.globals["app_title"] = APP_TITLE
+
 PAGE_SIZE = 15
 
 def render_registration(request: Request, error: str | None = None, form: dict | None = None, status_code: int = 200):
@@ -265,7 +268,7 @@ def archive_stale_tickets() -> int:
         for t in stale:
             db.add(Visit(
                 citizen_name=t.citizen_name, lane=t.lane, ticket_number=t.ticket_number,
-                final_status="no_show", service_id=t.service_id,
+                final_status="no_show", service_id=t.service_id, address=t.address,
                 created_at=t.created_at,      # stays on the day it was registered
                 called_at=t.called_at,
                 completed_at=None,            # never served, so no time out ("--" on the pages)
@@ -1139,9 +1142,11 @@ def queue_snapshot() -> dict:
     }
 
 @app.post("/register", dependencies=[Depends(login_required)])
-def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = Form(""), service_id: str = Form("")):
-    form = {"citizen_name": citizen_name, "lane": lane, "service_id": service_id}
+def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = Form(""), service_id: str = Form(""), address: str = Form("")):
+    form = {"citizen_name": citizen_name, "lane": lane, "service_id": service_id, "address": address}
     name, sid = clean_text(citizen_name, 100), parse_optional_int(service_id)
+    addr = clean_text(address, 150) or None
+    
     if not name:
         return render_registration(request, "Client name is required.", form, 400)
     if lane not in ("P", "R"):
@@ -1156,8 +1161,11 @@ def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = 
         service_name = service.service_name
         ticket_number = issue_ticket_number(db, lane)          
         created_at = datetime.now()
-        ticket = Ticket(citizen_name=name, lane=lane, service_id=sid,
+        
+        ticket = Ticket(citizen_name=name, lane=lane, service_id=sid, address=addr,
                         ticket_number=ticket_number, created_at=created_at)
+        
+        
         db.add(ticket)
         db.commit()
         ticket_id = ticket.id
@@ -1329,6 +1337,7 @@ def finish_ticket(ticket_id: int, final_status: str, allowed_statuses: tuple):
         number = ticket.ticket_number
         visit = Visit(
             citizen_name=ticket.citizen_name,
+            address=ticket.address,
             lane=ticket.lane,
             ticket_number=number,
             final_status=final_status,
@@ -1444,7 +1453,7 @@ def clear_queue(request: Request):
             counts[t.status] += 1
             db.add(Visit(
                 citizen_name=t.citizen_name, lane=t.lane, ticket_number=t.ticket_number,
-                final_status="no_show", service_id=t.service_id,
+                final_status="no_show", service_id=t.service_id, address=t.address,
                 created_at=t.created_at, called_at=t.called_at, completed_at=now,
             ))
             db.delete(t)
@@ -1553,7 +1562,8 @@ def apply_visit_filters(query, d_from, d_to, lane, service_id, q):
     if q:
         like = like_pattern(q)
         query = query.filter(Visit.ticket_number.ilike(like, escape="\\")
-                             | Visit.citizen_name.ilike(like, escape="\\"))
+                             | Visit.citizen_name.ilike(like, escape="\\")
+                             | Visit.address.ilike(like, escape="\\"))
     return query
 
 def like_pattern(q: str) -> str:
@@ -1632,12 +1642,13 @@ def attendance_export(request: Request, date_from: str = "", date_to: str = "", 
 
         buffer = io.StringIO()
         writer = csv.writer(buffer)
-        writer.writerow(["Date", "Ticket", "Client name", "Type", "Service", "Time in", "Time out", "Status"])
+        writer.writerow(["Date", "Ticket", "Client name", "Address", "Type", "Service", "Time in", "Time out", "Status"])
         for v in rows:
             writer.writerow([
                 v.created_at.strftime("%m/%d/%Y"),
                 csv_safe(v.ticket_number),
                 csv_safe(v.citizen_name),
+                csv_safe(v.address),
                 "Priority" if v.lane == "P" else "Regular",
                 csv_safe(v.service.service_name if v.service else "Removed service"),
                 v.called_at.strftime("%I:%M %p") if v.called_at else "",

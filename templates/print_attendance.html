@@ -138,6 +138,12 @@
             border-bottom: 1px solid var(--line);
         }
 
+        td .addr {
+            display: block;
+            font-size: 11px;
+            color: #6b7690;
+        }
+
         td.muted {
             color: var(--muted);
         }
@@ -296,7 +302,8 @@
                 <tr>
                     <td class="muted">{{ loop.index }}</td>
                     <td><strong>{{ v.ticket_number }}</strong></td>
-                    <td><strong>{{ v.citizen_name }}</strong></td>
+                    <td><strong>{{ v.citizen_name }}</strong>{% if v.address %}<span class="addr">{{ v.address
+                            }}</span>{% endif %}</td>
                     <td class="muted">{% if v.lane == "P" %}Priority{% else %}Regular{% endif %}</td>
                     <td class="muted">{{ v.service_label }}</td>
                     <td class="muted">{{ v.called_at.strftime('%I:%M %p') if v.called_at else '--' }}</td>
