@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, doc_header, documents_tabs %}
+{% block title %}Edit template{% endblock %}
+{% block page_title %}Documents{% endblock %}
+{% block page_subtitle %}Edit template{% endblock %}
+{% block description %}Edit the wording of a document{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/static/document_header.css">
+{% endblock %}
+{% block content %}
+{% if message %}
+<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}" role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
+{% endif %}
+
+{{ documents_tabs('templates') }}
+
+<div class="editor-layout">
+    <section class="card">
+        <h2 class="card-title">{{ icon('pencil', 22) }} {{ shown.name }}
+            <span class="tag tag-regular">{{ 'Built-in' if t.builtin else 'Custom' }}</span></h2>
+        {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+
+        <form action="/documents/templates/{{ t.id }}/edit" method="post" class="form" id="form-template">
+            <div class="field">
+                <label for="name">Name of the document</label>
+                <input type="text" name="name" id="name" value="{{ shown.name }}" maxlength="60" autocomplete="off" required>
+            </div>
+
+            <div class="field">
+                <label for="body">Wording</label>
+                <div class="field-chips" id="field-chips" aria-label="Insert a field">
+                    <span class="hint">Insert a field:</span>
+                    {% for f in core_fields %}
+                    <button type="button" class="chip-btn" data-insert="{{ f }}">{{ f }}</button>
+                    {% endfor %}
+                    {% for key, (label, fields) in extra_menu.items() %}{% for f in fields %}
+                    <button type="button" class="chip-btn chip-extra" data-insert="{{ f }}" data-needs="{{ key }}"{% if f not in available %} hidden{% endif %}>{{ f }}</button>
+                    {% endfor %}{% endfor %}
+                    <button type="button" class="chip-btn chip-extra" data-insert="{{ validity_field }}" data-needs="validity"{% if validity_field not in available %} hidden{% endif %}>{{ validity_field }}</button>
+                </div>
+                <textarea name="body" id="body" rows="16" spellcheck="true">{{ shown.body }}</textarea>
+                <p class="hint">Press Enter twice to start a new paragraph. A field such as {Client name} is replaced when the document
+                    is printed, and its value is printed in bold. Use the buttons above so the field names are spelled correctly.</p>
+                <p class="field-error" id="tpl-error" role="alert"{% if not error %} hidden{% endif %}></p>
+            </div>
+
+            <div class="form-row">
+                <div class="field">
+                    <label for="code_prefix">Number prefix</label>
+                    <input type="text" name="code_prefix" id="code_prefix" value="{{ shown.code_prefix }}" maxlength="6" autocomplete="off" required>
+                    <p class="hint">Starts the control number, for example BC. Templates with the same prefix share one number sequence.</p>
+                </div>
+                <div class="field">
+                    <label for="default_fee">Default fee (pesos)</label>
+                    <input type="text" name="default_fee" id="default_fee" value="{{ shown.default_fee }}" inputmode="decimal" autocomplete="off">
+                    <p class="hint">Can be changed for each document. 0 means no fee. This only records the fee; it is not a payment.</p>
+                </div>
+            </div>
+
+            <fieldset class="field">
+                <legend>Options</legend>
+                <label class="check-row check-compact">
+                    <input type="checkbox" name="print_fee" value="1"{% if shown.print_fee %} checked{% endif %}>
+                    <span>Print the fee and receipt number at the bottom of the document</span>
+                </label>
+                <label class="check-row check-compact">
+                    <input type="checkbox" name="use_validity" value="1" data-grants="validity"{% if shown.use_validity %} checked{% endif %}>
+                    <span>This document expires</span>
+                </label>
+                <div class="validity-row">
+                    <label for="validity_months">Valid for (months)</label>
+                    <input type="text" name="validity_months" id="validity_months" value="{{ shown.validity_months }}" inputmode="numeric" maxlength="2" autocomplete="off">
+                </div>
+            </fieldset>
+
+            <fieldset class="field">
+                <legend>Extra fields</legend>
+                <p class="hint">Tick what this document needs. Ticked items are asked for when issuing it, and can be used in the wording.</p>
+                {% for key, (label, fields) in extra_menu.items() %}
+                <label class="check-row check-compact">
+                    <input type="checkbox" name="extras" value="{{ key }}" data-grants="{{ key }}"{% if key in shown.extras %} checked{% endif %}>
+                    <span>{{ label }}</span>
+                </label>
+                {% endfor %}
+            </fieldset>
+
+            <div class="form-actions">
+                <a href="/documents/templates" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save template</button>
+            </div>
+        </form>
+
+        {% if t.builtin and t.customized %}
+        <div class="restore-row">
+            <p class="hint">You changed the wording of this built-in document. You can go back to the original wording. Your other settings stay as they are.</p>
+            <button type="button" class="btn btn-danger-outline" data-confirm
+                data-action="/documents/templates/{{ t.id }}/restore"
+                data-title="Restore the original wording?"
+                data-message="The wording of {{ shown.name }} will go back to the original text. Your changes to the wording will be lost. The name, fee, prefix and options stay as they are."
+                data-label="Restore original wording" data-variant="danger">{{ icon('recall', 18) }} Restore original wording</button>
+        </div>
+        {% endif %}
+    </section>
+
+    <aside class="editor-preview" aria-label="Preview">
+        <section class="card">
+            <h2 class="card-title">Preview</h2>
+            <p class="hint">Made-up client details are used here. The header, control number and signatures come from Settings.</p>
+            <div class="paper-preview">
+                {{ doc_header(branding) }}
+                <h2 class="tpl-title" id="tpl-title">{{ shown.name|upper }}</h2>
+                <div class="tpl-body" id="tpl-body"></div>
+                <div class="tpl-signs">
+                    <div><span class="tpl-sign-name">{{ branding.secretary_name|upper }}</span><small>{{ branding.secretary_title }}</small></div>
+                    <div><span class="tpl-sign-name">{{ branding.captain_name|upper }}</span><small>{{ branding.captain_title }}</small></div>
+                </div>
+            </div>
+        </section>
+    </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const $ = (sel, root = document) => root.querySelector(sel);
+    const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+    const form = $('#form-template');
+    const bodyBox = $('#body');
+    const nameBox = $('#name');
+    const previewBody = $('#tpl-body');
+    const previewTitle = $('#tpl-title');
+    const errorBox = $('#tpl-error');
+    const monthsBox = $('#validity_months');
+
+    // Show only the field buttons that this template may use, and only allow months when it expires
+    function syncAvailable() {
+        $$('[data-needs]').forEach((chip) => {
+            const switchOn = $('[data-grants="' + chip.dataset.needs + '"]');
+            chip.hidden = !(switchOn && switchOn.checked);
+        });
+        monthsBox.disabled = !$('[data-grants="validity"]').checked;
+    }
+
+    // Insert {Field name} where the cursor is
+    $$('[data-insert]').forEach((chip) => chip.addEventListener('click', () => {
+        const text = '{' + chip.dataset.insert + '}';
+        bodyBox.setRangeText(text, bodyBox.selectionStart, bodyBox.selectionEnd, 'end');
+        bodyBox.focus();
+        bodyBox.dispatchEvent(new Event('input', { bubbles: true }));
+    }));
+
+    // The preview is made by the server, so it is exactly what will print
+    function draw(paragraphs) {
+        previewBody.replaceChildren(...paragraphs.map((pairs) => {
+            const p = document.createElement('p');
+            pairs.forEach(([text, bold]) => {
+                const piece = document.createElement(bold ? 'strong' : 'span');
+                piece.textContent = text;                 // text only: nothing typed can become markup
+                p.appendChild(piece);
+            });
+            return p;
+        }));
+    }
+
+    let timer = null;
+    let latest = 0;
+    async function refresh() {
+        const mine = ++latest;
+        try {
+            const reply = await fetch('/documents/templates/preview', { method: 'POST', body: new FormData(form) });
+            if (!reply.ok) throw new Error('status ' + reply.status);
+            const data = await reply.json();
+            if (mine !== latest) return;                  // a newer request is already on its way
+            draw(data.paragraphs);
+            errorBox.textContent = data.error || '';
+            errorBox.hidden = !data.error;
+        } catch (e) {
+            if (mine !== latest) return;
+            errorBox.textContent = 'The preview could not be updated.';
+            errorBox.hidden = false;
+        }
+    }
+    const schedule = () => { clearTimeout(timer); timer = setTimeout(refresh, 250); };
+
+    form.addEventListener('input', () => { previewTitle.textContent = nameBox.value.toUpperCase(); schedule(); });
+    form.addEventListener('change', () => { syncAvailable(); schedule(); });
+    syncAvailable();
+    refresh();
+})();
+</script>
+{% endblock %}

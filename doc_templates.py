@@ -1,0 +1,236 @@
+"""The wording of documents: the built-in texts, the fields a text may use, and how a text becomes
+paragraphs. No web code and no database code, so it can be tested on its own.
+
+A template body is plain text with fields in curly brackets, like {Client name}. Fields are replaced
+one by one with plain text; the body is NEVER run as code.
+"""
+import calendar
+import difflib
+import re
+from datetime import date
+from decimal import Decimal, InvalidOperation
+
+MONTHS = ("January", "February", "March", "April", "May", "June", "July",
+          "August", "September", "October", "November", "December")     # fixed, so a Windows language setting cannot change them
+
+# ---------------------------------------------------------------- the fields a text may use
+CORE_FIELDS = ("Client name", "Address", "Purpose", "Issue date", "Issue day", "Issue month", "Issue year",
+               "Barangay name", "Municipality", "Province")
+
+# The fixed menu of extras: key -> (label on the form, fields it adds). OR number and fee come as a pair.
+EXTRA_MENU = {
+    "age": ("Age", ("Age",)),
+    "civil_status": ("Civil status", ("Civil status",)),
+    "years": ("Years of residence", ("Years of residence",)),
+    "fee": ("Fee and OR number", ("Fee", "OR number")),
+}
+VALIDITY_FIELD = "Valid until"          # available only when the template has a validity in months
+
+_OWNER = {field: key for key, (_, fields) in EXTRA_MENU.items() for field in fields}   # "Age" -> "age"
+ALL_FIELDS = CORE_FIELDS + tuple(_OWNER) + (VALIDITY_FIELD,)
+
+MAX_BODY_CHARS = 5000
+TOKEN = re.compile(r"\{([^{}\n]*)\}")
+
+
+def _norm(name: str) -> str:
+    """Matching ignores capitals and extra spaces, so {client  NAME} still works."""
+    return " ".join(name.split()).casefold()
+
+
+def available_fields(extras, validity_on: bool) -> tuple:
+    fields = list(CORE_FIELDS)
+    for key in EXTRA_MENU:
+        if key in extras:
+            fields.extend(EXTRA_MENU[key][1])
+    if validity_on:
+        fields.append(VALIDITY_FIELD)
+    return tuple(fields)
+
+
+def clean_extras(values) -> list:
+    """Only keys from the menu, each once, in menu order."""
+    return [key for key in EXTRA_MENU if key in set(values)]
+
+
+def validate_body(body: str, available) -> str | None:
+    """None if the text is fine, otherwise a sentence for the secretary."""
+    if not body.strip():
+        return "The wording cannot be empty."
+    if len(body) > MAX_BODY_CHARS:
+        return f"The wording is too long ({MAX_BODY_CHARS} characters at most)."
+    if "{" in TOKEN.sub("", body) or "}" in TOKEN.sub("", body):
+        return "There is a { or } that is not part of a field. Fields look like {Client name}."
+    allowed = {_norm(f) for f in available}
+    everything = {_norm(f): f for f in ALL_FIELDS}
+    for match in TOKEN.finditer(body):
+        typed = match.group(1)
+        key = _norm(typed)
+        if key in allowed:
+            continue
+        if key in everything:                                    # a real field, but not switched on for this template
+            field = everything[key]
+            if field == VALIDITY_FIELD:
+                return "{Valid until} is only available when \"This document expires\" is ticked."
+            return f"{{{field}}} is only available when \"{EXTRA_MENU[_OWNER[field]][0]}\" is ticked under Extra fields."
+        close = difflib.get_close_matches(key, list(everything), n=1, cutoff=0.6)
+        hint = f" Did you mean {{{everything[close[0]]}}}?" if close else ""
+        return f"{{{typed}}} is not a known field.{hint}"
+    return None
+
+# ---------------------------------------------------------------- from text to paragraphs
+def normalize_body(text: str) -> str:
+    """One newline style, no trailing spaces, at most one blank line in a row."""
+    text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    text = "\n".join(line.rstrip() for line in text.split("\n"))
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def render_paragraphs(body: str, values: dict) -> list:
+    """Body + field values -> paragraphs, each a list of [text, bold] pairs. A blank line starts a new
+    paragraph; a single line break is just a space. Field values are bold. An unknown {field} is left
+    exactly as typed (saving is blocked on those, so this only shows while she is still typing).
+    The same structure is what is frozen on an issued document."""
+    known = {_norm(k): v for k, v in values.items()}
+    paragraphs = []
+    for chunk in re.split(r"\n\s*\n", normalize_body(body)):
+        text = " ".join(chunk.split())
+        if not text:
+            continue
+        pairs, last = [], 0
+        for match in TOKEN.finditer(text):
+            key = _norm(match.group(1))
+            if key not in known:
+                continue
+            if match.start() > last:
+                pairs.append([text[last:match.start()], False])
+            if known[key]:
+                pairs.append([known[key], True])
+            last = match.end()
+        if last < len(text):
+            pairs.append([text[last:], False])
+        paragraphs.append(pairs)
+    return paragraphs
+
+# ---------------------------------------------------------------- field values
+def ordinal(n: int) -> str:
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def add_months(start: date, months: int) -> date:
+    index = start.month - 1 + months
+    year, month = start.year + index // 12, index % 12 + 1
+    return date(year, month, min(start.day, calendar.monthrange(year, month)[1]))
+
+
+def format_pesos(centavos: int) -> str:
+    return f"\u20b1{centavos // 100:,}.{centavos % 100:02d}"
+
+
+def field_values(*, client_name="", address="", purpose="", issue_date: date, barangay_name="", municipality="",
+                 province="", age="", civil_status="", years="", fee_centavos=0, or_number="",
+                 validity_months=None) -> dict:
+    """Every field -> the text it prints. Used with sample data here and with real data when issuing."""
+    values = {
+        "Client name": client_name, "Address": address, "Purpose": purpose,
+        "Issue date": f"{MONTHS[issue_date.month - 1]} {issue_date.day}, {issue_date.year}",
+        "Issue day": ordinal(issue_date.day), "Issue month": MONTHS[issue_date.month - 1],
+        "Issue year": str(issue_date.year),
+        "Barangay name": barangay_name, "Municipality": municipality, "Province": province,
+        "Age": age, "Civil status": civil_status, "Years of residence": years,
+        "Fee": format_pesos(fee_centavos) if fee_centavos > 0 else "No fee",
+        "OR number": or_number,
+    }
+    if validity_months:
+        until = add_months(issue_date, validity_months)
+        values["Valid until"] = f"{MONTHS[until.month - 1]} {until.day}, {until.year}"
+    return values
+
+
+def sample_values(branding: dict, fee_centavos: int, validity_months, today: date) -> dict:
+    """What the live preview fills in. The barangay's own name is real; the client is made up."""
+    return field_values(
+        client_name="Juan Dela Cruz", address="Purok 1, Sample Street", purpose="employment",
+        issue_date=today, barangay_name=branding["name"], municipality=branding["municipality"],
+        province=branding["province"], age="35", civil_status="Single", years="10",
+        fee_centavos=fee_centavos, or_number="1234567", validity_months=validity_months)
+
+
+# ---------------------------------------------------------------- reading what was typed in the editor
+def parse_fee(text: str) -> int:
+    """'50', '50.5' or '1,000.00' -> centavos. Raises ValueError with a message for the secretary."""
+    cleaned = (text or "").replace(",", "").replace("\u20b1", "").strip()
+    if not cleaned:
+        return 0
+    try:
+        amount = Decimal(cleaned)
+    except InvalidOperation:
+        raise ValueError("Enter the fee as an amount such as 50 or 50.00.") from None
+    if not amount.is_finite() or amount < 0 or amount > 100000:
+        raise ValueError("The fee must be between 0 and 100,000 pesos.")
+    if amount != amount.quantize(Decimal("0.01")):
+        raise ValueError("The fee can have at most two decimal places, such as 50.25.")
+    return int(amount * 100)
+
+
+def format_fee_input(centavos: int) -> str:
+    return f"{centavos // 100}.{centavos % 100:02d}"
+
+
+def parse_prefix(text: str) -> str:
+    prefix = (text or "").strip().upper()
+    if not re.fullmatch(r"[A-Z0-9]{1,6}", prefix):
+        raise ValueError("Use 1 to 6 letters or numbers for the number prefix, for example BC.")
+    return prefix
+
+
+def parse_months(text: str) -> int:
+    try:
+        months = int((text or "").strip())
+    except ValueError:
+        months = 0
+    if not 1 <= months <= 60:
+        raise ValueError("Enter how many months the document stays valid (1 to 60).")
+    return months
+
+# ---------------------------------------------------------------- the built-in wordings
+# English only for now. The key ends in a language code so Filipino wordings can be added later
+# without a migration. A built-in row with no saved body uses the text below; Restore clears it.
+# EACH BARANGAY MUST CONFIRM THESE WORDINGS against its own practice before using them.
+_CLOSING = ("Issued this {Issue day} day of {Issue month} {Issue year} at {Barangay name}, "
+            "{Municipality}, {Province}.")
+_PURPOSE = ("This certification is issued upon the request of the above-named person for {Purpose} "
+            "and for whatever legal purpose it may serve.")
+
+BUILTINS = {
+    "residency_en": {
+        "name": "Certificate of Residency", "prefix": "CR",
+        "body": ("TO WHOM IT MAY CONCERN:\n\n"
+                 "This is to certify that {Client name} is a resident of {Address}, {Barangay name}, "
+                 "{Municipality}, {Province}.\n\n" + _PURPOSE + "\n\n" + _CLOSING),
+    },
+    "clearance_en": {
+        "name": "Barangay Clearance", "prefix": "BC",
+        "body": ("TO WHOM IT MAY CONCERN:\n\n"
+                 "This is to certify that {Client name}, a resident of {Address}, {Barangay name}, "
+                 "{Municipality}, {Province}, has no derogatory record on file in this office as of this date.\n\n"
+                 "This clearance is issued upon the request of the above-named person for {Purpose} "
+                 "and for whatever legal purpose it may serve.\n\n" + _CLOSING),
+    },
+    "indigency_en": {
+        "name": "Certificate of Indigency", "prefix": "CI",
+        "body": ("TO WHOM IT MAY CONCERN:\n\n"
+                 "This is to certify that {Client name}, a resident of {Address}, {Barangay name}, "
+                 "{Municipality}, {Province}, belongs to an indigent family in this barangay.\n\n" + _PURPOSE
+                 + "\n\n" + _CLOSING),
+    },
+    "blank_en": {
+        "name": "Blank Document", "prefix": "DOC",
+        "body": "TO WHOM IT MAY CONCERN:\n\n{Purpose}\n\n" + _CLOSING,
+    },
+}
+
+
+def builtin_body(key: str) -> str:
+    return BUILTINS.get(key, {}).get("body", "")

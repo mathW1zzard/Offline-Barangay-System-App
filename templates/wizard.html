@@ -14,16 +14,22 @@
     <main class="wizard">
         <header class="wizard-top">
             <div>
-                <p class="step-indicator">{% if step == 'finish' %}Barangay setup &middot; All done{% else %}Barangay setup &middot; Step {{ step_number }} of 3{% endif %}</p>
-                <h1>{% if step == 'profile' %}Tell us about your barangay{% elif step == 'logos' %}Add your logos{% elif step == 'signatories' %}Who signs the documents?{% else %}You are all set{% endif %}</h1>
+                <p class="step-indicator">{% if step == 'finish' %}Barangay setup &middot; All done{% else %}Barangay
+                    setup &middot; Step {{ step_number }} of 3{% endif %}</p>
+                <h1>{% if step == 'profile' %}Tell us about your barangay{% elif step == 'logos' %}Add your logos{% elif
+                    step == 'signatories' %}Who signs the documents?{% else %}You are all set{% endif %}</h1>
             </div>
-            <form action="/logout" method="post"><button type="submit" class="btn btn-sm btn-outline">{{ icon('log-out', 16) }} Sign out</button></form>
+            <form action="/logout" method="post"><button type="submit" class="btn btn-sm btn-outline">{{ icon('log-out',
+                    16) }} Sign out</button></form>
         </header>
 
         <ol class="wizard-steps" aria-label="Setup progress">
-            {% for key, label in [('profile', 'Barangay profile'), ('logos', 'Logos'), ('signatories', 'Signatories')] %}
-            <li class="wizard-step{{ ' is-current' if key == step }}{{ ' is-done' if step_index(key) < step_index(step) }}"{% if key == step %} aria-current="step"{% endif %}>
-                <span class="wizard-dot">{% if step_index(key) < step_index(step) %}&#10003;{% else %}{{ loop.index }}{% endif %}</span>{{ label }}
+            {% for key, label in [('profile', 'Barangay profile'), ('logos', 'Logos'), ('signatories', 'Signatories')]
+            %}
+            <li class="wizard-step{{ ' is-current' if key == step }}{{ ' is-done' if step_index(key) < step_index(step) }}"
+                {% if key==step %} aria-current="step" {% endif %}>
+                <span class="wizard-dot">{% if step_index(key) < step_index(step) %}&#10003;{% else %}{{ loop.index }}{%
+                        endif %}</span>{{ label }}
             </li>
             {% endfor %}
         </ol>
@@ -34,36 +40,44 @@
 
                 {% if step == 'profile' %}
                 <!--STEP 1: PROFILE-->
-                <p class="hint">This is printed at the top of every certificate and report, and on the queue slip. You can change it later in Settings.</p>
+                <p class="hint">This is printed at the top of every certificate and report, and on the queue slip. You
+                    can change it later in Settings.</p>
                 <form action="/wizard/profile" method="post" class="form" id="form-profile">
                     <div class="field">
-                        <label for="barangay_name">Barangay name</label>
-                        <input type="text" name="barangay_name" id="barangay_name" value="{{ shown.barangay_name }}" placeholder="e.g. Barangay 4" maxlength="60" autocomplete="off" required autofocus>
+                        <label for="barangay_name">Name of your barangay</label>
+                        <input type="text" name="barangay_name" id="barangay_name" value="{{ shown.barangay_name }}"
+                            placeholder="e.g. Barangay 4" maxlength="60" autocomplete="off" required autofocus>
                     </div>
                     <div class="field">
-                        <label for="municipality">Municipality or city</label>
-                        <input type="text" name="municipality" id="municipality" value="{{ shown.municipality }}" placeholder="e.g. San Mateo" maxlength="60" autocomplete="off" required>
+                        <label for="municipality">Your municipality or city</label>
+                        <input type="text" name="municipality" id="municipality" value="{{ shown.municipality }}"
+                            placeholder="e.g. San Mateo" maxlength="60" autocomplete="off" required>
                     </div>
                     <div class="field">
-                        <label for="province">Province</label>
-                        <input type="text" name="province" id="province" value="{{ shown.province }}" placeholder="e.g. Isabela" maxlength="60" autocomplete="off" required>
+                        <label for="province">Your province</label>
+                        <input type="text" name="province" id="province" value="{{ shown.province }}"
+                            placeholder="e.g. Isabela" maxlength="60" autocomplete="off" required>
                     </div>
                     <div class="field">
                         <label for="header_line_1">Line above the barangay name</label>
-                        <input type="text" name="header_line_1" id="header_line_1" value="{{ shown.header_line_1 }}" maxlength="80" autocomplete="off">
+                        <input type="text" name="header_line_1" id="header_line_1" value="{{ shown.header_line_1 }}"
+                            maxlength="80" autocomplete="off">
                     </div>
                     <div class="field">
                         <label for="header_line_2">Line under the barangay name (optional)</label>
-                        <input type="text" name="header_line_2" id="header_line_2" value="{{ shown.header_line_2 }}" placeholder="e.g. Office of the Barangay Captain" maxlength="80" autocomplete="off">
+                        <input type="text" name="header_line_2" id="header_line_2" value="{{ shown.header_line_2 }}"
+                            placeholder="e.g. Office of the Barangay Captain" maxlength="80" autocomplete="off">
                     </div>
                     <div class="wizard-actions">
                         <button type="submit" class="btn btn-primary btn-lg">Next</button>
                     </div>
                 </form>
-
+                <p class="hint">Type the name the way it should print, for example "Barangay 4" or "Barangay Poblacion".
+                    Documents use it exactly as typed.</p>
                 {% elif step == 'logos' %}
                 <!--STEP 2: LOGOS-->
-                <p class="hint">Choose a picture for each logo you have, and see it in the preview. PNG or JPG, up to 2 MB. A phone photo is fine.
+                <p class="hint">Choose a picture for each logo you have, and see it in the preview. PNG or JPG, up to 2
+                    MB. A phone photo is fine.
                     One logo is enough. Nothing is saved until you press Next.</p>
                 <form action="/wizard/logos" method="post" enctype="multipart/form-data" class="form" id="form-logos">
                     <div class="logo-grid">
@@ -71,15 +85,18 @@
                         <div class="logo-slot" data-slot="{{ slot }}">
                             <p class="label">{{ info.label }}</p>
                             <div class="logo-box">
-                                <img class="logo-img" alt=""{% if info.url %} src="{{ info.url }}"{% else %} hidden{% endif %}>
-                                <span class="logo-empty"{% if info.url %} hidden{% endif %}>No picture</span>
+                                <img class="logo-img" alt="" {% if info.url %} src="{{ info.url }}" {% else %} hidden{%
+                                    endif %}>
+                                <span class="logo-empty" {% if info.url %} hidden{% endif %}>No picture</span>
                             </div>
                             <input type="file" name="logo_{{ slot }}" accept="image/png,image/jpeg,image/webp" hidden>
                             <input type="hidden" name="remove_{{ slot }}" value="0">
                             <p class="logo-msg" role="alert"></p>
                             <div class="row-actions">
-                                <button type="button" class="btn btn-sm btn-outline" data-logo-choose>Choose picture</button>
-                                <button type="button" class="btn btn-sm btn-danger-outline" data-logo-remove>Remove</button>
+                                <button type="button" class="btn btn-sm btn-outline" data-logo-choose>Choose
+                                    picture</button>
+                                <button type="button" class="btn btn-sm btn-danger-outline"
+                                    data-logo-remove>Remove</button>
                             </div>
                         </div>
                         {% endfor %}
@@ -94,26 +111,33 @@
 
                 {% elif step == 'signatories' %}
                 <!--STEP 3: SIGNATORIES-->
-                <p class="hint">Their names and titles are printed on the signature lines. Officials change after elections, so you can update them any time in Settings.</p>
+                <p class="hint">Their names and titles are printed on the signature lines. Officials change after
+                    elections, so you can update them any time in Settings.</p>
                 <form action="/wizard/signatories" method="post" class="form" id="form-signatories">
                     <div class="form-row">
                         <div class="field">
                             <label for="signatory_captain_name">Barangay Captain: full name</label>
-                            <input type="text" name="signatory_captain_name" id="signatory_captain_name" value="{{ shown.signatory_captain_name }}" maxlength="80" autocomplete="off" required autofocus>
+                            <input type="text" name="signatory_captain_name" id="signatory_captain_name"
+                                value="{{ shown.signatory_captain_name }}" maxlength="80" autocomplete="off" required
+                                autofocus>
                         </div>
                         <div class="field">
                             <label for="signatory_captain_title">Title</label>
-                            <input type="text" name="signatory_captain_title" id="signatory_captain_title" value="{{ shown.signatory_captain_title }}" maxlength="60" autocomplete="off" required>
+                            <input type="text" name="signatory_captain_title" id="signatory_captain_title"
+                                value="{{ shown.signatory_captain_title }}" maxlength="60" autocomplete="off" required>
                         </div>
                     </div>
                     <div class="form-row">
                         <div class="field">
                             <label for="signatory_secretary_name">Barangay Secretary: full name</label>
-                            <input type="text" name="signatory_secretary_name" id="signatory_secretary_name" value="{{ shown.signatory_secretary_name }}" maxlength="80" autocomplete="off" required>
+                            <input type="text" name="signatory_secretary_name" id="signatory_secretary_name"
+                                value="{{ shown.signatory_secretary_name }}" maxlength="80" autocomplete="off" required>
                         </div>
                         <div class="field">
                             <label for="signatory_secretary_title">Title</label>
-                            <input type="text" name="signatory_secretary_title" id="signatory_secretary_title" value="{{ shown.signatory_secretary_title }}" maxlength="60" autocomplete="off" required>
+                            <input type="text" name="signatory_secretary_title" id="signatory_secretary_title"
+                                value="{{ shown.signatory_secretary_title }}" maxlength="60" autocomplete="off"
+                                required>
                         </div>
                     </div>
                     <div class="wizard-actions">
@@ -129,14 +153,19 @@
                 <p class="hint">This is how the top of your documents will look.</p>
                 <div class="paper-preview">{{ doc_header(branding) }}</div>
                 {% if skipped %}
-                <div class="alert alert-warn" role="status">Still to do: {{ skipped|join(', ') }}. You can add {{ 'it' if skipped|length == 1 else 'them' }} later in Settings, which will remind you until it is done.</div>
+                <div class="alert alert-warn" role="status">Still to do: {{ skipped|join(', ') }}. You can add {{ 'it'
+                    if skipped|length == 1 else 'them' }} later in Settings, which will remind you until it is done.
+                </div>
                 {% endif %}
-                <p class="hint">Print a test page to check the header, your logos and the paper size. The test page is not saved and uses no control number.
+                <p class="hint">Print a test page to check the header, your logos and the paper size. The test page is
+                    not saved and uses no control number.
                     Next, check the receipt printer under Maintenance, and the list of services under Services.</p>
                 <div class="wizard-actions">
                     <a href="/wizard/signatories" class="btn btn-outline btn-lg">Back</a>
-                    <a href="/wizard/test-document" class="btn btn-outline btn-lg">{{ icon('printer', 20) }} Print a test document</a>
-                    <form action="/wizard/finish" method="post"><button type="submit" class="btn btn-primary btn-lg">Finish setup</button></form>
+                    <a href="/wizard/test-document" class="btn btn-outline btn-lg">{{ icon('printer', 20) }} Print a
+                        test document</a>
+                    <form action="/wizard/finish" method="post"><button type="submit"
+                            class="btn btn-primary btn-lg">Finish setup</button></form>
                 </div>
                 {% endif %}
             </section>

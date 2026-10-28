@@ -5,12 +5,13 @@ from fastapi import Request
 from fastapi import Form
 from fastapi import Depends
 from fastapi import File, UploadFile
-from fastapi.responses import RedirectResponse, Response, FileResponse
+from fastapi.responses import RedirectResponse, Response, FileResponse, JSONResponse
 from app_logging import setup_logging, log
 setup_logging()
-from database import SessionLocal, Ticket, Service, Visit, Admin, AdminLog, engine
+from database import SessionLocal, Ticket, Service, Visit, Admin, AdminLog, engine, DocumentTemplate, IssuedDocument
 from paths import resource_path, data_path
 import branding
+import doc_templates
 from datetime import datetime, date, time, timedelta
 from starlette.middleware.sessions import SessionMiddleware
 from enum import Enum
@@ -123,7 +124,7 @@ def current_priority_streak(db) -> int:
 THROTTLE_MAX_FAILURES, THROTTLE_WINDOW_SECONDS = 5, 60
 
 # ADMIN LOGS
-LOG_CATEGORIES = ["Queue", "Service", "Settings", "Security", "Database"]
+LOG_CATEGORIES = ["Queue", "Service", "Settings", "Security", "Database", "Documents"]
 NOT_SIGNED_IN = "(not signed in)" # who gets blamed for failed logins
 
 # SESSION TRACKING (so the audit log can record a session that ended by closing the app)
@@ -2180,6 +2181,284 @@ def finish_wizard(request: Request):
     branding.finish_setup()
     log_action("Settings", "Setup Completed", "First-run setup finished", request)
     return RedirectResponse(url="/dashboard", status_code=303)
+
+# DOCUMENTS: THE TEMPLATES TAB (the wording of each kind of document)
+def template_name_error(db, name: str, exclude_id: int | None = None) -> str | None:
+    if not name:
+        return "The document needs a name."
+    q = db.query(DocumentTemplate).filter(func.lower(DocumentTemplate.name) == name.lower())
+    if exclude_id:
+        q = q.filter(DocumentTemplate.id != exclude_id)
+    return f'A document named "{name}" already exists.' if q.first() else None
+
+def unique_template_name(db, base: str) -> str:
+    """'Barangay Clearance (copy)', then '(copy 2)', '(copy 3)'..."""
+    base = base[:48]
+    candidate, n = f"{base} (copy)", 2
+    while template_name_error(db, candidate):
+        candidate, n = f"{base} (copy {n})", n + 1
+    return candidate
+
+def unlink_services(db, template_id: int) -> list:
+    """Services that point at this template stop pointing at it. Returns their names (the caller commits)."""
+    linked = db.query(Service).filter(Service.document_template_id == template_id).all()
+    for service in linked:
+        service.document_template_id = None
+    return [service.service_name for service in linked]
+
+def effective_body(row) -> str:
+    """The saved wording, or the built-in wording from the code when none is saved."""
+    return doc_templates.normalize_body(row.body if row.body is not None else doc_templates.builtin_body(row.builtin_key))
+
+def template_views(db) -> list:
+    linked = {}
+    for s in db.query(Service).filter(Service.document_template_id.isnot(None)).order_by(Service.service_name).all():
+        linked.setdefault(s.document_template_id, []).append(s.service_name)
+    return [{
+        "id": r.id, "name": r.name, "builtin": r.builtin_key is not None,
+        "customized": r.builtin_key is not None and r.body is not None,
+        "code_prefix": r.code_prefix,
+        "fee_text": doc_templates.format_pesos(r.default_fee_centavos) if r.default_fee_centavos else "No fee",
+        "services": linked.get(r.id, []), "active": bool(r.is_active),
+    } for r in db.query(DocumentTemplate).order_by(DocumentTemplate.id).all()]
+
+@app.get("/documents", dependencies=[Depends(admin_required)])
+def documents_home():
+    # The "Issue a document" tab arrives in the next step. Until then Documents opens on Templates.
+    return RedirectResponse(url="/documents/templates", status_code=303)
+
+@app.get("/documents/templates", dependencies=[Depends(admin_required)])
+def show_templates(request: Request):
+    message = request.session.pop("flash", None)
+    with SessionLocal() as db:
+        items = template_views(db)
+    return templates.TemplateResponse(request, "documents_templates.html", {"items": items, "message": message})
+
+# ---- the editor
+def editor_values(row) -> dict:
+    return {"name": row.name, "body": effective_body(row), "code_prefix": row.code_prefix,
+            "default_fee": doc_templates.format_fee_input(row.default_fee_centavos),
+            "use_validity": row.validity_months is not None, "validity_months": row.validity_months or 6,
+            "extras": [e for e in row.extras.split(",") if e], "print_fee": bool(row.print_fee)}
+
+def render_template_editor(request: Request, row, form: dict | None = None, error: str | None = None, status_code: int = 200):
+    """`form` is what was typed when a save failed, so nothing is lost."""
+    shown = {**editor_values(row), **(form or {})}
+    return templates.TemplateResponse(request, "template_editor.html", {
+        "t": {"id": row.id, "builtin": row.builtin_key is not None,
+              "customized": row.builtin_key is not None and row.body is not None},
+        "shown": shown, "error": error, "message": request.session.pop("flash", None),
+        "core_fields": doc_templates.CORE_FIELDS, "extra_menu": doc_templates.EXTRA_MENU,
+        "validity_field": doc_templates.VALIDITY_FIELD,
+        "available": doc_templates.available_fields(shown["extras"], shown["use_validity"]),
+    }, status_code=status_code)
+
+def read_template_form(db, template_id, name, body, code_prefix, default_fee, use_validity, validity_months, extras, print_fee):
+    """Returns (values to save, what she typed, error). Exactly one of values / error is None."""
+    typed = {"name": clean_text(name, 60), "body": doc_templates.normalize_body(body),
+             "code_prefix": code_prefix.strip().upper(), "default_fee": default_fee.strip(),
+             "use_validity": use_validity == "1", "validity_months": validity_months.strip() or "6",
+             "extras": doc_templates.clean_extras(extras), "print_fee": print_fee == "1"}
+    try:
+        problem = template_name_error(db, typed["name"], template_id)
+        if problem:
+            raise ValueError(problem)
+        prefix = doc_templates.parse_prefix(typed["code_prefix"])
+        fee = doc_templates.parse_fee(typed["default_fee"])
+        months = doc_templates.parse_months(typed["validity_months"]) if typed["use_validity"] else None
+    except ValueError as e:
+        return None, typed, str(e)
+    problem = doc_templates.validate_body(
+        typed["body"], doc_templates.available_fields(typed["extras"], typed["use_validity"]))
+    if problem:
+        return None, typed, problem
+    return {"name": typed["name"], "body": typed["body"], "code_prefix": prefix, "default_fee_centavos": fee,
+            "validity_months": months, "extras": ",".join(typed["extras"]), "print_fee": typed["print_fee"]}, typed, None
+
+@app.get("/documents/templates/{template_id}/edit", dependencies=[Depends(admin_required)])
+def edit_template_page(request: Request, template_id: int):
+    with SessionLocal() as db:
+        row = db.get(DocumentTemplate, template_id)
+        if row is None:
+            return RedirectResponse(url="/documents/templates", status_code=303)
+        return render_template_editor(request, row)
+
+@app.post("/documents/templates/{template_id}/edit", dependencies=[Depends(admin_required)])
+def save_template(request: Request, template_id: int, name: str = Form(""), body: str = Form(""),
+                  code_prefix: str = Form(""), default_fee: str = Form(""), use_validity: str = Form(""),
+                  validity_months: str = Form(""), extras: list[str] = Form(default=[]), print_fee: str = Form("")):
+    with SessionLocal() as db:
+        row = db.get(DocumentTemplate, template_id)
+        if row is None:
+            return RedirectResponse(url="/documents/templates", status_code=303)
+        values, typed, error = read_template_form(db, row.id, name, body, code_prefix, default_fee,
+                                                  use_validity, validity_months, extras, print_fee)
+        if error:
+            return render_template_editor(request, row, form=typed, error=error, status_code=400)
+
+        changes = []
+        if row.name != values["name"]:
+            changes.append(f'renamed from "{row.name}"')
+        if effective_body(row) != values["body"]:
+            changes.append("wording changed")
+        if row.code_prefix != values["code_prefix"]:
+            changes.append(f'prefix {row.code_prefix} -> {values["code_prefix"]}')
+        if row.default_fee_centavos != values["default_fee_centavos"]:
+            changes.append(f"fee {doc_templates.format_pesos(row.default_fee_centavos)} -> "
+                           f"{doc_templates.format_pesos(values['default_fee_centavos'])}")
+        if row.validity_months != values["validity_months"]:
+            changes.append(f"validity {row.validity_months or 'none'} -> {values['validity_months'] or 'none'} months")
+        if row.extras != values["extras"]:
+            changes.append(f"extra fields \"{row.extras or 'none'}\" -> \"{values['extras'] or 'none'}\"")
+        if bool(row.print_fee) != values["print_fee"]:
+            changes.append("print fee " + ("on" if values["print_fee"] else "off"))
+
+        # A built-in whose wording is back to the original keeps following the code (nothing saved)
+        same_as_original = (row.builtin_key is not None
+                            and values["body"] == doc_templates.normalize_body(doc_templates.builtin_body(row.builtin_key)))
+        row.name, row.code_prefix = values["name"], values["code_prefix"]
+        row.body = None if same_as_original else values["body"]
+        row.default_fee_centavos, row.validity_months = values["default_fee_centavos"], values["validity_months"]
+        row.extras, row.print_fee = values["extras"], values["print_fee"]
+        db.commit()
+        saved_name = values["name"]
+    if changes:
+        log_action("Documents", "Template Updated", f'Template "{saved_name}": ' + "; ".join(changes), request)
+    flash(request, True, f'"{saved_name}" was saved.' if changes else "Nothing was changed.")
+    return RedirectResponse(url="/documents/templates", status_code=303)
+
+@app.post("/documents/templates/preview", dependencies=[Depends(admin_required)])
+def preview_template(body: str = Form(""), default_fee: str = Form(""), use_validity: str = Form(""),
+                     validity_months: str = Form(""), extras: list[str] = Form(default=[])):
+    """The live preview in the editor: the same code that prints, filled with made-up client details.
+    Never raises on half-typed input; it just reports what is wrong so far."""
+    extras = doc_templates.clean_extras(extras)
+    validity_on = use_validity == "1"
+    try:
+        fee = doc_templates.parse_fee(default_fee)
+    except ValueError:
+        fee = 0
+    try:
+        months = doc_templates.parse_months(validity_months) if validity_on else None
+    except ValueError:
+        months = None
+    text = doc_templates.normalize_body(body)
+    error = doc_templates.validate_body(text, doc_templates.available_fields(extras, validity_on))
+    values = doc_templates.sample_values(branding.get_branding(), fee, months, date.today())
+    return JSONResponse({"paragraphs": doc_templates.render_paragraphs(text, values), "error": error})
+
+# ---- restore, duplicate, new, turn on / off, delete
+@app.post("/documents/templates/{template_id}/restore", dependencies=[Depends(admin_required)])
+def restore_template(request: Request, template_id: int):
+    """Built-in documents only: go back to the wording in the code. Other settings are untouched."""
+    with SessionLocal() as db:
+        row = db.get(DocumentTemplate, template_id)
+        if row is None or row.builtin_key is None:
+            return RedirectResponse(url="/documents/templates", status_code=303)
+        name = row.name
+        changed = row.body is not None
+        row.body = None
+        db.commit()
+    if changed:
+        log_action("Documents", "Template Restored", f'Restored the original wording of "{name}"', request)
+    flash(request, True, "The original wording was restored." if changed else "The wording was already the original.")
+    return RedirectResponse(url=f"/documents/templates/{template_id}/edit", status_code=303)
+
+@app.post("/documents/templates/{template_id}/duplicate", dependencies=[Depends(admin_required)])
+def duplicate_template(request: Request, template_id: int):
+    with SessionLocal() as db:
+        row = db.get(DocumentTemplate, template_id)
+        if row is None:
+            return RedirectResponse(url="/documents/templates", status_code=303)
+        copy = DocumentTemplate(
+            builtin_key=None, name=unique_template_name(db, row.name), body=effective_body(row),
+            code_prefix=row.code_prefix, extras=row.extras, default_fee_centavos=row.default_fee_centavos,
+            validity_months=row.validity_months, print_fee=row.print_fee, is_active=True)
+        db.add(copy)
+        db.commit()
+        copy_id, copy_name, original = copy.id, copy.name, row.name
+    log_action("Documents", "Template Duplicated", f'Copied "{original}" as "{copy_name}"', request)
+    flash(request, True, f'Copied as "{copy_name}". Change its name and wording below.')
+    return RedirectResponse(url=f"/documents/templates/{copy_id}/edit", status_code=303)
+
+@app.post("/documents/templates/new", dependencies=[Depends(admin_required)])
+def new_template(request: Request):
+    """A new template starts from the Blank document's wording."""
+    blank = doc_templates.BUILTINS["blank_en"]
+    with SessionLocal() as db:
+        name, n = "New document", 2
+        while template_name_error(db, name):
+            name, n = f"New document {n}", n + 1
+        created = DocumentTemplate(builtin_key=None, name=name, body=doc_templates.normalize_body(blank["body"]),
+                                   code_prefix=blank["prefix"], extras="", default_fee_centavos=0,
+                                   validity_months=None, print_fee=True, is_active=True)
+        db.add(created)
+        db.commit()
+        created_id = created.id
+    log_action("Documents", "Template Created", f'Created a new template "{name}"', request)
+    flash(request, True, "New template created. Give it a name and write its wording below.")
+    return RedirectResponse(url=f"/documents/templates/{created_id}/edit", status_code=303)
+
+@app.post("/documents/templates/{template_id}/deactivate", dependencies=[Depends(admin_required)])
+def deactivate_template(request: Request, template_id: int):
+    with SessionLocal() as db:
+        row = db.get(DocumentTemplate, template_id)
+        if row is None:
+            return RedirectResponse(url="/documents/templates", status_code=303)
+        name = row.name
+        unlinked = unlink_services(db, row.id)
+        row.is_active = False
+        db.commit()
+    note = f"; removed from services: {', '.join(unlinked)}" if unlinked else ""
+    log_action("Documents", "Template Turned Off", f'Turned off "{name}"{note}', request)
+    return RedirectResponse(url="/documents/templates", status_code=303)
+
+@app.post("/documents/templates/{template_id}/activate", dependencies=[Depends(admin_required)])
+def activate_template(request: Request, template_id: int):
+    with SessionLocal() as db:
+        row = db.get(DocumentTemplate, template_id)
+        if row is None:
+            return RedirectResponse(url="/documents/templates", status_code=303)
+        name = row.name
+        row.is_active = True
+        db.commit()
+    log_action("Documents", "Template Turned On", f'Turned on "{name}"', request)
+    return RedirectResponse(url="/documents/templates", status_code=303)
+
+@app.post("/documents/templates/{template_id}/delete", dependencies=[Depends(admin_required)])
+def delete_template(request: Request, template_id: int):
+    """Custom templates only. One that already has issued documents is turned off instead, like services."""
+    entry = None
+    with SessionLocal() as db:
+        row = db.get(DocumentTemplate, template_id)
+        if row is None:
+            return RedirectResponse(url="/documents/templates", status_code=303)
+        if row.builtin_key is not None:
+            flash(request, False, "Built-in documents cannot be deleted. Turn it off instead.")
+            return RedirectResponse(url="/documents/templates", status_code=303)
+        name = row.name
+        has_history = db.query(IssuedDocument).filter(IssuedDocument.template_id == template_id).first() is not None
+        unlinked = unlink_services(db, template_id)
+        note = f"; removed from services: {', '.join(unlinked)}" if unlinked else ""
+        if has_history:
+            row.is_active = False
+            db.commit()
+            entry = ("Template Turned Off", f'"{name}" was deleted, but documents were issued with it, so it was turned off instead{note}')
+        else:
+            try:
+                db.delete(row)
+                db.commit()
+                entry = ("Template Deleted", f'Deleted template "{name}"{note}')
+            except IntegrityError:          # a document was issued a moment ago: keep the row
+                db.rollback()
+                row = db.get(DocumentTemplate, template_id)
+                unlink_services(db, template_id)
+                row.is_active = False
+                db.commit()
+                entry = ("Template Turned Off", f'"{name}" gained issued documents, so it was turned off instead')
+    log_action("Documents", entry[0], entry[1], request)
+    return RedirectResponse(url="/documents/templates", status_code=303)
+
 
 # ABOUT
 @app.get("/about", dependencies=[Depends(login_required)])

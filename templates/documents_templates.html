@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, badge, documents_tabs %}
+{% block title %}Documents{% endblock %}
+{% block page_title %}Documents{% endblock %}
+{% block page_subtitle %}Templates{% endblock %}
+{% block description %}The wording of the documents the barangay issues{% endblock %}
+{% block content %}
+{% if message %}
+<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}"
+    role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
+{% endif %}
+
+{{ documents_tabs('templates') }}
+
+<section class="card">
+    <div class="section-head">
+        <h2>Document templates</h2>
+        <form action="/documents/templates/new" method="post">
+            <button type="submit" class="btn btn-primary">{{ icon('plus', 18) }} New template</button>
+        </form>
+    </div>
+    <p class="hint delete-description">A template is the wording of one kind of document. The header, logos, title,
+        control number and
+        signature lines are added automatically from Settings. Each barangay should check the wording of the built-in
+        documents
+        against its own practice before using them.</p>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Document</th>
+                    <th>Number prefix</th>
+                    <th>Fee</th>
+                    <th>Used by services</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in items %}
+                <tr{% if not t.active %} class="row-muted" {% endif %}>
+                    <td>
+                        <span class="cell-primary">{{ t.name }}</span>
+                        <span class="tag tag-regular">{{ 'Built-in' if t.builtin else 'Custom' }}</span>
+                        {% if t.customized %}<span class="tag tag-priority">Wording changed</span>{% endif %}
+                    </td>
+                    <td>{{ t.code_prefix }}</td>
+                    <td>{{ t.fee_text }}</td>
+                    <td>{{ t.services|join(', ') if t.services else '--' }}</td>
+                    <td>{{ badge('Active' if t.active else 'Inactive') }}</td>
+                    <td>
+                        <div class="row-actions">
+                            <a class="btn btn-sm btn-outline" href="/documents/templates/{{ t.id }}/edit">{{
+                                icon('pencil', 16) }} Edit</a>
+                            <form action="/documents/templates/{{ t.id }}/duplicate" method="post">
+                                <button type="submit" class="btn btn-sm btn-outline">Duplicate</button>
+                            </form>
+                            {% if t.active %}
+                            <button type="button" class="btn btn-sm btn-outline" data-confirm
+                                data-action="/documents/templates/{{ t.id }}/deactivate"
+                                data-title="Turn off this document?"
+                                data-message="{% if t.services %}{{ t.name }} is used by: {{ t.services|join(', ') }}. Those services will no longer show a Prepare document button. {% else %}{{ t.name }} will no longer be offered when issuing documents. {% endif %}You can turn it on again at any time."
+                                data-label="Turn off">Turn off</button>
+                            {% else %}
+                            <form action="/documents/templates/{{ t.id }}/activate" method="post">
+                                <button type="submit" class="btn btn-sm btn-outline">Turn on</button>
+                            </form>
+                            {% endif %}
+                            {% if not t.builtin %}
+                            <button type="button" class="btn btn-sm btn-danger-outline" data-confirm
+                                data-action="/documents/templates/{{ t.id }}/delete" data-title="Delete this template?"
+                                data-message="{{ t.name }} will be deleted.{% if t.services %} It is used by: {{ t.services|join(', ') }}. Those services will no longer show a Prepare document button.{% endif %} If documents were already issued with it, it is turned off instead so the history stays intact."
+                                data-label="Delete template" data-variant="danger">{{ icon('trash', 16) }}
+                                Delete</button>
+                            {% endif %}
+                        </div>
+                    </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="empty-row">No templates yet.</td>
+                    </tr>
+                    {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

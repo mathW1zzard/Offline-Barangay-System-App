@@ -47,18 +47,18 @@
             <form action="/settings/profile" method="post" class="form" id="form-profile" data-title="Barangay profile">
                 <div class="form-row">
                     <div class="field">
-                        <label for="barangay_name">Barangay name</label>
+                        <label for="barangay_name">Name of your barangay</label>
                         <input type="text" name="barangay_name" id="barangay_name" value="{{ shown.barangay_name }}"
                             placeholder="e.g. Barangay 4" maxlength="60" autocomplete="off" required>
                     </div>
                     <div class="field">
-                        <label for="municipality">Municipality or city</label>
+                        <label for="municipality">Your municipality or city</label>
                         <input type="text" name="municipality" id="municipality" value="{{ shown.municipality }}"
                             placeholder="e.g. San Mateo" maxlength="60" autocomplete="off" required>
                     </div>
                 </div>
                 <div class="field">
-                    <label for="province">Province</label>
+                    <label for="province">Your province</label>
                     <input type="text" name="province" id="province" value="{{ shown.province }}"
                         placeholder="e.g. Isabela" maxlength="60" autocomplete="off" required>
                 </div>
@@ -79,6 +79,8 @@
                 <div class="form-actions"><button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save
                         profile</button></div>
             </form>
+            <p class="hint">Type the name the way it should print, for example "Barangay 4" or "Barangay Poblacion".
+                Documents use it exactly as typed.</p>
         </section>
 
         <!--LOGOS-->
@@ -220,7 +222,7 @@
         const $ = (sel, root = document) => root.querySelector(sel);
         const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-        
+
         // ---------- Unsaved changes: warn before leaving a section with edits ----------
         const forms = $$('form[data-title]');
         const dirtyForms = () => forms.filter((f) => f.dataset.dirty);

@@ -145,6 +145,12 @@
     <line x1="14" x2="14" y1="2" y2="6" />
     <line x1="8" x2="8" y1="10" y2="14" />
     <line x1="16" x2="16" y1="18" y2="22" />
+    {%- elif name == 'file-text' -%}
+    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+    <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+    <path d="M10 9H8" />
+    <path d="M16 13H8" />
+    <path d="M16 17H8" />
     {%- endif -%}
 </svg>
 {%- endmacro %}
@@ -177,4 +183,13 @@
     </div>
     <div class="doc-logos doc-logos-right">{{ _logo(b.logos.right, 'pv-right', ids) }}{{ _logo(b.logos.third, 'pv-third', ids) }}</div>
 </header>
+{%- endmacro %}
+
+{#- The three tabs of the Documents section. The first two arrive in the next step. -#}
+{% macro documents_tabs(active) -%}
+<nav class="doc-tabs" aria-label="Documents">
+    <span class="doc-tab is-soon" title="Coming in the next update">Issue a document</span>
+    <span class="doc-tab is-soon" title="Coming in the next update">Issued documents</span>
+    <a class="doc-tab{{ ' active' if active == 'templates' }}" href="/documents/templates"{% if active == 'templates' %} aria-current="page"{% endif %}>Templates</a>
+</nav>
 {%- endmacro %}

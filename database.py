@@ -141,7 +141,7 @@ class DocumentTemplate(Base):
     print_fee = Column(Boolean, nullable=False, default=True, server_default="1")
     is_active = Column(Boolean, nullable=False, default=True, server_default="1")
     
-class IssedDocument(Base):
+class IssuedDocument(Base):
     """One printed document. Everything is a plain copy so history survives edited templates,
     served tickets and purged attendance."""
     __tablename__ = "issued_documents"
