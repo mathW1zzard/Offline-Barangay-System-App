@@ -2040,7 +2040,6 @@ def settings_page(request: Request, form: dict | None = None, errors: dict | Non
         "errors": errors or {},
         "saved": request.session.pop("settings_flash", None),   # one-time "Saved." message
         "logos": branding.logo_info(values),
-        "paper_sizes": branding.PAPER_SIZES,
         "control_formats": branding.CONTROL_FORMATS,
     }, status_code=status_code)
 
@@ -2073,8 +2072,8 @@ def save_settings_signatories(request: Request, signatory_captain_name: str = Fo
     return settings_saved(request, "signatories", apply_settings(request, new, "Signatories Updated"))
 
 @app.post("/settings/documents", dependencies=[Depends(admin_required)])
-def save_settings_documents(request: Request, paper_size: str = Form(""), control_number_format: str = Form("")):
-    new = {"paper_size": paper_size.strip(), "control_number_format": control_number_format.strip()}
+def save_settings_documents(request: Request, control_number_format: str = Form("")):
+    new = {"control_number_format": control_number_format.strip()}
     error = branding.validate_documents(new)
     if error:
         return settings_page(request, form=new, errors={"documents": error}, status_code=400)
@@ -2144,9 +2143,7 @@ def wizard_start():
 
 @app.get("/wizard/test-document", dependencies=[Depends(wizard_login)])
 def wizard_test_document(request: Request):
-    """A header-and-signatures test page. Nothing is saved and no control number is used."""
-    paper = branding.PAPER_CSS.get(branding.get_branding()["paper_size"], "A4")
-    return templates.TemplateResponse(request, "test_document.html", {"paper_css": paper})
+        return templates.TemplateResponse(request, "test_document.html", {})
 
 @app.get("/wizard/{step}", dependencies=[Depends(wizard_login)])
 def show_wizard_step(request: Request, step: str):
@@ -2732,7 +2729,6 @@ def print_document(request: Request, doc_id: int, first: str = ""):
                 "header_line_1": snapshot.get("header_line_1", b["header_line_1"]),
                 "header_line_2": snapshot.get("header_line_2", b["header_line_2"]), "logos": b["logos"]},
         "signers": {k: snapshot.get(k, b[k]) for k in ("captain_name", "captain_title", "secretary_name", "secretary_title")},
-        "paper_css": branding.PAPER_CSS.get(b["paper_size"], "A4"),
     })
     
 # ---- the history (the "Issued documents" tab)

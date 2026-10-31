@@ -113,7 +113,7 @@ class Setting(Base):
     A missing key means "use the default in code", so new settings never need a migration."""
     __tablename__ = "settings"
     key = Column(String, primary_key=True)
-    value = Column(Text, nullable=False, default="", service_default="")
+    value = Column(Text, nullable=False, default="", server_default="")
 
 class DocumentTemplate(Base):
     __tablename__ = "document_templates"

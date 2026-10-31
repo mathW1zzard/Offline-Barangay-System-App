@@ -106,6 +106,8 @@
                     </label>
                 </div>
                 <p class="hint">This only records the fee and the receipt number. It is not a payment.</p>
+                <p class="hint">The control number is assigned when you press Print, and the document is saved in the
+                    history.</p>
             </fieldset>
 
             <div class="form-actions">
@@ -113,8 +115,6 @@
                 <button type="submit" class="btn btn-primary btn-lg" {% if names_missing %} disabled{% endif %}>{{
                     icon('printer', 20) }} Print</button>
             </div>
-            <p class="hint">The control number is assigned when you press Print, and the document is saved in the
-                history.</p>
         </form>
     </section>
 

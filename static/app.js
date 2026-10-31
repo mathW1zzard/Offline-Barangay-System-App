@@ -56,7 +56,7 @@
         }
 
         // A click on the dim backdrop lands on the <dialog> element itself
-        if (e.target instanceof HTMLDialogElement && e.target.open) e.target.close();
+        if (e.target instanceof HTMLDialogElement && e.target.open && !e.target.hasAttribute('data-keep-open')) e.target.close();
     });
 
     // Edit service: one dialog, filled with the row's values

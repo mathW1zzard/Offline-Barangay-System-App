@@ -216,9 +216,7 @@
                 browser uses whatever paper the user picks in their own
                 print dialog (Letter/A4/Legal/etc). Only the margin is ours.
             */
-            @page {
-                margin: 12mm;
-            }
+            @page { size: {{ paper_css }}; margin: 0; }
 
             body {
                 background: #fff;
@@ -232,10 +230,9 @@
                browser is already sizing to the chosen paper, instead of
                staying pinned to a fixed on-screen preview width. */
             .page {
-                width: auto;
                 max-width: none;
                 margin: 0;
-                padding: 0;
+                padding: 15mm 18mm;
                 box-shadow: none;
             }
 
@@ -266,7 +263,7 @@
     <div class="page">
         {{ doc_header(branding) }}
 
-        <div class="title">
+        <div class="title" style="display: flex; text-align: center">
             <h1>ATTENDANCE REPORT</h1>
         </div>
         <div class="cards">

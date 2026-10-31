@@ -5,15 +5,27 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
+    grid-template-areas: "left title right";
     gap: 16px;
     padding-bottom: 12px;
     border-bottom: 2px solid var(--navy, #1b2a4a);
 }
 
+/* The box around the header is what the width check below measures, so the layout follows the
+   space the header really has (the small preview, the wizard, the sheet of paper). */
+.doc-head-box {
+    container-type: inline-size;
+}
+
+.doc-head > .doc-logos:first-child { grid-area: left; }
+.doc-head > .doc-title { grid-area: title; }
+.doc-head > .doc-logos-right { grid-area: right; }
+
 .doc-logos {
     display: flex;
     align-items: center;
     gap: 10px;
+    min-width: 0;                  /* lets the logos shrink instead of running over the name */
 }
 
 .doc-logos-right {
@@ -26,6 +38,8 @@
     width: auto;
     height: auto;
     object-fit: contain;
+    min-width: 0;
+    flex: 0 1 auto;
 }
 
 .doc-logos img[hidden] {
@@ -59,4 +73,18 @@
     margin: 2px 0 0;
     font-size: 12px;
     color: var(--muted, #6b7690);
+}
+
+/* Not enough room for three columns: the logos sit together in one centred row, the name goes underneath. */
+@container (max-width: 600px) {
+    .doc-head {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px 14px;
+    }
+    .doc-head > .doc-logos { flex: 0 1 auto; }
+    .doc-head > .doc-title { flex: 1 0 100%; order: 2; }
+    .doc-logos img { max-width: 78px; max-height: 62px; }
+    .doc-name { font-size: 17px; }
 }

@@ -96,8 +96,8 @@ def validate_signatories(v: dict, require_names: bool = False) -> str | None:
 
 
 def validate_documents(v: dict) -> str | None:
-    if v["paper_size"] not in PAPER_SIZES or v["control_number_format"] not in CONTROL_FORMATS:
-        return "Please choose one of the options in the lists."
+    if v["control_number_format"] not in CONTROL_FORMATS:
+        return "Please choose one of the options in the list."
     return None
 
 # ---------------------------------------------------------------- logos

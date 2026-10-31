@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/static/document_header.css">
     <style>
         /* The paper size chosen in Settings. The browser's own print window can still change it. */
-        @page { size: {{ paper_css }}; margin: 15mm; }
+        @page { margin: 0; }
 
         :root {
             --navy: #1b2a4a;
@@ -189,7 +189,7 @@
             .page {
                 max-width: none;
                 margin: 0;
-                padding: 0;
+                padding: 15mm 18mm;
                 box-shadow: none;
             }
 

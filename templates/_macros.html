@@ -167,29 +167,38 @@
     }}</span>
 {%- endmacro %}
 
-{#- One logo: shown when it exists. On the Settings preview (ids=True) it is always present, hidden when empty, so the page script can fill it in. -#}
+{#- One logo: shown when it exists. On the Settings preview (ids=True) it is always present, hidden when empty, so the
+page script can fill it in. -#}
 {% macro _logo(url, id, ids) -%}
-{%- if url or ids -%}<img alt=""{% if url %} src="{{ url }}"{% else %} hidden{% endif %}{% if ids %} id="{{ id }}"{% endif %}>{%- endif -%}
+{%- if url or ids -%}<img alt="" {% if url %} src="{{ url }}" {% else %} hidden{% endif %}{% if ids %} id="{{ id }}" {%
+    endif %}>{%- endif -%}
 {%- endmacro %}
 
 {#- The header of every printed page. b = the branding dict (name, header lines, logos). -#}
 {% macro doc_header(b, ids=False) -%}
-<header class="doc-head">
-    <div class="doc-logos">{{ _logo(b.logos.left, 'pv-left', ids) }}</div>
-    <div class="doc-title">
-        <p class="doc-line1"{% if ids %} id="pv-line1"{% endif %}>{{ b.header_line_1|upper }}</p>
-        <h1 class="doc-name"{% if ids %} id="pv-name"{% endif %}>{{ b.full_name|upper }}</h1>
-        <p class="doc-line2"{% if ids %} id="pv-line2"{% endif %}>{{ b.header_line_2 }}</p>
+<header class="doc-header">
+    <div class="doc-head-box">
+        <header class="doc-head">
+            <div class="doc-logos">{{ _logo(b.logos.left, 'pv-left', ids) }}</div>
+            <div class="doc-title">
+                <p class="doc-line1" {% if ids %} id="pv-line1" {% endif %}>{{ b.header_line_1|upper }}</p>
+                <h1 class="doc-name" {% if ids %} id="pv-name" {% endif %}>{{ b.full_name|upper }}</h1>
+                <p class="doc-line2" {% if ids %} id="pv-line2" {% endif %}>{{ b.header_line_2 }}</p>
+            </div>
+            <div class="doc-logos doc-logos-right">{{ _logo(b.logos.right, 'pv-right', ids) }}{{ _logo(b.logos.third,
+                'pv-third', ids) }}</div>
+        </header>
     </div>
-    <div class="doc-logos doc-logos-right">{{ _logo(b.logos.right, 'pv-right', ids) }}{{ _logo(b.logos.third, 'pv-third', ids) }}</div>
-</header>
-{%- endmacro %}
+    {%- endmacro %}
 
-{#- The three tabs of the Documents section. -#}
-{% macro documents_tabs(active) -%}
-<nav class="doc-tabs" aria-label="Documents">
-    <a class="doc-tab{{ ' active' if active == 'issue' }}" href="/documents"{% if active == 'issue' %} aria-current="page"{% endif %}>Issue a document</a>
-    <a class="doc-tab{{ ' active' if active == 'history' }}" href="/documents/history"{% if active == 'history' %} aria-current="page"{% endif %}>Issued documents</a>
-    <a class="doc-tab{{ ' active' if active == 'templates' }}" href="/documents/templates"{% if active == 'templates' %} aria-current="page"{% endif %}>Templates</a>
-</nav>
-{%- endmacro %}
+    {#- The three tabs of the Documents section. -#}
+    {% macro documents_tabs(active) -%}
+    <nav class="doc-tabs" aria-label="Documents">
+        <a class="doc-tab{{ ' active' if active == 'issue' }}" href="/documents" {% if active=='issue' %}
+            aria-current="page" {% endif %}>Issue a document</a>
+        <a class="doc-tab{{ ' active' if active == 'history' }}" href="/documents/history" {% if active=='history' %}
+            aria-current="page" {% endif %}>Issued documents</a>
+        <a class="doc-tab{{ ' active' if active == 'templates' }}" href="/documents/templates" {% if active=='templates'
+            %} aria-current="page" {% endif %}>Templates</a>
+    </nav>
+    {%- endmacro %}

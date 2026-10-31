@@ -8,21 +8,29 @@
 <link rel="stylesheet" href="/static/document_header.css">
 {% endblock %}
 
-{% block content %}
-{# The message at the top of a section: its error, or "Saved." after a save #}
-{% macro section_message(section) %}
-{% if errors.get(section) %}
-<div class="alert alert-error" role="alert">{{ errors[section] }}</div>
-{% elif saved and saved.section == section %}
+{# "Saved." on the page after a save; an error is shown inside the Edit window instead #}
+{% macro saved_message(section) %}
+{% if saved and saved.section == section %}
 <div class="alert alert-success" role="status">{{ saved.text }}</div>
 {% endif %}
 {% endmacro %}
 
+{% macro error_message(section) %}
+{% if errors.get(section) %}
+<div class="alert alert-error" role="alert">{{ errors[section] }}</div>
+{% endif %}
+{% endmacro %}
+
+{# One saved value in the read-only list; an empty one says so plainly #}
+{% macro value_row(label, value, missing='Not filled in') %}
+<dt>{{ label }}</dt>
+<dd>{% if value %}{{ value }}{% else %}<span class="value-missing">{{ missing }}</span>{% endif %}</dd>
+{% endmacro %}
+
+{% block content %}
 {% if not values.signatory_captain_name or not values.signatory_secretary_name %}
 <div class="alert alert-warn" role="status">The names of the Barangay Captain and Secretary are not filled in yet. Fill
-    them in under
-    <a href="#signatories">Signatories</a> so they can appear on printouts.
-</div>
+    them in under <a href="#signatories">Signatories</a> so they can appear on printouts.</div>
 {% endif %}
 
 {% if 'logos' in values.wizard_later.split(',') and not (logos.values()|selectattr('url')|list) %}
@@ -40,162 +48,85 @@
 <div class="settings-layout">
     <div class="settings-main">
 
-        <!--BARANGAY PROFILE-->
+        <!--BARANGAY PROFILE (what is saved; Edit opens the window)-->
         <section class="card settings-section" id="profile">
-            <h2 class="card-title">{{ icon('landmark', 22) }} Barangay profile</h2>
-            {{ section_message('profile') }}
-            <form action="/settings/profile" method="post" class="form" id="form-profile" data-title="Barangay profile">
-                <div class="form-row">
-                    <div class="field">
-                        <label for="barangay_name">Name of your barangay</label>
-                        <input type="text" name="barangay_name" id="barangay_name" value="{{ shown.barangay_name }}"
-                            placeholder="e.g. Barangay 4" maxlength="60" autocomplete="off" required>
-                    </div>
-                    <div class="field">
-                        <label for="municipality">Your municipality or city</label>
-                        <input type="text" name="municipality" id="municipality" value="{{ shown.municipality }}"
-                            placeholder="e.g. San Mateo" maxlength="60" autocomplete="off" required>
-                    </div>
-                </div>
-                <div class="field">
-                    <label for="province">Your province</label>
-                    <input type="text" name="province" id="province" value="{{ shown.province }}"
-                        placeholder="e.g. Isabela" maxlength="60" autocomplete="off" required>
-                </div>
-                <div class="form-row">
-                    <div class="field">
-                        <label for="header_line_1">Line above the barangay name</label>
-                        <input type="text" name="header_line_1" id="header_line_1" value="{{ shown.header_line_1 }}"
-                            maxlength="80" autocomplete="off">
-                    </div>
-                    <div class="field">
-                        <label for="header_line_2">Line under the barangay name (optional)</label>
-                        <input type="text" name="header_line_2" id="header_line_2" value="{{ shown.header_line_2 }}"
-                            placeholder="e.g. Office of the Barangay Captain" maxlength="80" autocomplete="off">
-                    </div>
-                </div>
-                <p class="hint">These lines are printed at the top of every certificate and report, and on the queue
-                    slip.</p>
-                <div class="form-actions"><button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save
-                        profile</button></div>
-            </form>
-            <p class="hint">Type the name the way it should print, for example "Barangay 4" or "Barangay Poblacion".
-                Documents use it exactly as typed.</p>
+            <div class="settings-head">
+                <h2 class="card-title">{{ icon('landmark', 22) }} Barangay profile</h2>
+                <button type="button" class="btn btn-outline" data-edit="edit-profile">{{ icon('pencil', 18) }}
+                    Edit</button>
+            </div>
+            {{ saved_message('profile') }}
+            <dl class="settings-values">
+                {{ value_row('Name of your barangay', values.barangay_name) }}
+                {{ value_row('Municipality or city', values.municipality) }}
+                {{ value_row('Province', values.province) }}
+                {{ value_row('Line above the name', values.header_line_1, 'None') }}
+                {{ value_row('Line under the name', values.header_line_2, 'None') }}
+            </dl>
         </section>
 
         <!--LOGOS-->
         <section class="card settings-section" id="logos">
-            <h2 class="card-title">{{ icon('landmark', 22) }} Logos</h2>
-            {{ section_message('logos') }}
-            <form action="/settings/logos" method="post" enctype="multipart/form-data" class="form" id="form-logos"
-                data-title="Logos">
-                <p class="hint">Choose a picture to see it in the preview. Nothing is saved until you press Save logos.
-                    PNG or JPG, up to 2 MB. A phone photo is fine. Leave a slot empty to leave it out of the header.</p>
-                <div class="logo-grid">
-                    {% for slot, info in logos.items() %}
-                    <div class="logo-slot" data-slot="{{ slot }}">
-                        <p class="label">{{ info.label }}</p>
-                        <div class="logo-box">
-                            <img class="logo-img" alt="" {% if info.url %} src="{{ info.url }}" {% else %} hidden{%
-                                endif %}>
-                            <span class="logo-empty" {% if info.url %} hidden{% endif %}>No picture</span>
-                        </div>
-                        <input type="file" name="logo_{{ slot }}" accept="image/png,image/jpeg,image/webp" hidden>
-                        <input type="hidden" name="remove_{{ slot }}" value="0">
-                        <p class="logo-msg" role="alert"></p>
-                        <div class="row-actions">
-                            <button type="button" class="btn btn-sm btn-outline" data-logo-choose>Choose
-                                picture</button>
-                            <button type="button" class="btn btn-sm btn-danger-outline" data-logo-remove>Remove</button>
-                        </div>
+            <div class="settings-head">
+                <h2 class="card-title">{{ icon('landmark', 22) }} Logos</h2>
+                <button type="button" class="btn btn-outline" data-edit="edit-logos">{{ icon('pencil', 18) }}
+                    Edit</button>
+            </div>
+            {{ saved_message('logos') }}
+            <div class="logo-thumbs">
+                {% for slot, info in logos.items() %}
+                <figure class="logo-thumb">
+                    <div class="logo-thumb-box">
+                        {% if info.url %}<img src="{{ info.url }}" alt="{{ info.label }}">{% else %}<span
+                            class="logo-empty">No picture</span>{% endif %}
                     </div>
-                    {% endfor %}
-                </div>
-                <div class="form-actions"><button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save
-                        logos</button></div>
-            </form>
+                    <figcaption>{{ info.label }}</figcaption>
+                </figure>
+                {% endfor %}
+            </div>
         </section>
 
         <!--SIGNATORIES-->
         <section class="card settings-section" id="signatories">
-            <h2 class="card-title">{{ icon('user', 22) }} Signatories</h2>
-            {{ section_message('signatories') }}
-            <form action="/settings/signatories" method="post" class="form" id="form-signatories"
-                data-title="Signatories">
-                <div class="form-row">
-                    <div class="field">
-                        <label for="signatory_captain_name">Barangay Captain: full name</label>
-                        <input type="text" name="signatory_captain_name" id="signatory_captain_name"
-                            value="{{ shown.signatory_captain_name }}" maxlength="80" autocomplete="off">
-                    </div>
-                    <div class="field">
-                        <label for="signatory_captain_title">Title</label>
-                        <input type="text" name="signatory_captain_title" id="signatory_captain_title"
-                            value="{{ shown.signatory_captain_title }}" maxlength="60" autocomplete="off" required>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="field">
-                        <label for="signatory_secretary_name">Barangay Secretary: full name</label>
-                        <input type="text" name="signatory_secretary_name" id="signatory_secretary_name"
-                            value="{{ shown.signatory_secretary_name }}" maxlength="80" autocomplete="off">
-                    </div>
-                    <div class="field">
-                        <label for="signatory_secretary_title">Title</label>
-                        <input type="text" name="signatory_secretary_title" id="signatory_secretary_title"
-                            value="{{ shown.signatory_secretary_title }}" maxlength="60" autocomplete="off" required>
-                    </div>
-                </div>
-                <p class="hint">Officials change after elections. Update the names here and new printouts use them right
-                    away.
-                    Documents already issued keep the names they were printed with.</p>
-                <div class="form-actions"><button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save
-                        signatories</button></div>
-            </form>
+            <div class="settings-head">
+                <h2 class="card-title">{{ icon('user', 22) }} Signatories</h2>
+                <button type="button" class="btn btn-outline" data-edit="edit-signatories">{{ icon('pencil', 18) }}
+                    Edit</button>
+            </div>
+            {{ saved_message('signatories') }}
+            <dl class="settings-values">
+                {{ value_row(values.signatory_captain_title or 'Barangay Captain', values.signatory_captain_name) }}
+                {{ value_row(values.signatory_secretary_title or 'Barangay Secretary', values.signatory_secretary_name)
+                }}
+            </dl>
+            <p class="hint">Officials change after elections. Documents already issued keep the names they were printed
+                with.</p>
         </section>
 
         <!--DOCUMENT DEFAULTS-->
         <section class="card settings-section" id="documents">
-            <h2 class="card-title">{{ icon('file-chart', 22) }} Document defaults</h2>
-            {{ section_message('documents') }}
-            <form action="/settings/documents" method="post" class="form" id="form-documents"
-                data-title="Document defaults">
-                <div class="form-row">
-                    <div class="field">
-                        <label for="paper_size">Paper size for certificates</label>
-                        <select name="paper_size" id="paper_size">
-                            {% for key, label in paper_sizes.items() %}
-                            <option value="{{ key }}" {{ 'selected' if shown.paper_size==key }}>{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label for="control_number_format">Control number style</label>
-                        <select name="control_number_format" id="control_number_format">
-                            {% for key, example in control_formats.items() %}
-                            <option value="{{ key }}" {{ 'selected' if shown.control_number_format==key }}>{{ example }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <p class="hint">Use the paper that is loaded in the office printer. The control number is the serial
-                    number printed
-                    on each certificate. The first part comes from the document type, for example BC for Barangay
-                    Clearance.</p>
-                <div class="form-actions"><button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save
-                        document defaults</button></div>
-            </form>
+            <div class="settings-head">
+                <h2 class="card-title">{{ icon('file-chart', 22) }} Document defaults</h2>
+                <button type="button" class="btn btn-outline" data-edit="edit-documents">{{ icon('pencil', 18) }}
+                    Edit</button>
+            </div>
+            {{ saved_message('documents') }}
+            <dl class="settings-values">
+                {{ value_row('Control number style', control_formats.get(values.control_number_format,
+                values.control_number_format)) }}
+            </dl>
         </section>
     </div>
 
-    <!--LIVE PREVIEW-->
+    <!--HEADER PREVIEW: shows what is saved. While an Edit window is open it moves into that window.-->
     <aside class="settings-preview" aria-label="Header preview">
         <section class="card">
             <h2 class="card-title">Header preview</h2>
-            <p class="hint">This is how the top of a printed page will look. It changes as you type.</p>
-            <div class="paper-preview">
-                {{ doc_header(branding, ids=True) }}
+            <p class="hint">This is how the top of a printed page looks.</p>
+            <div id="preview-home">
+                <div class="paper-preview" id="live-preview">
+                    {{ doc_header(branding, ids=True) }}
+                </div>
             </div>
         </section>
     </aside>
@@ -203,13 +134,186 @@
 {% endblock %}
 
 {% block dialogs %}
-<dialog class="modal" id="leave-dialog">
-    <div class="modal-body">
-        <h2>Leave without saving?</h2>
-        <p class="modal-text" id="leave-text"></p>
+<!-- EDIT: BARANGAY PROFILE -->
+<dialog class="modal modal-wide" id="edit-profile" data-keep-open data-section="profile">
+    <form action="/settings/profile" method="post" class="modal-body form" id="form-profile">
+        <h2>Edit barangay profile</h2>
+        {{ error_message('profile') }}
+        <div class="form-row">
+            <div class="field">
+                <label for="barangay_name">Name of your barangay</label>
+                <input type="text" name="barangay_name" id="barangay_name" value="{{ shown.barangay_name }}"
+                    data-saved="{{ values.barangay_name }}" placeholder="e.g. Barangay Poblacion" maxlength="60"
+                    autocomplete="off" required>
+            </div>
+            <div class="field">
+                <label for="municipality">Your municipality or city</label>
+                <input type="text" name="municipality" id="municipality" value="{{ shown.municipality }}"
+                    data-saved="{{ values.municipality }}" maxlength="60" autocomplete="off" required>
+            </div>
+        </div>
+        <div class="field">
+            <label for="province">Your province</label>
+            <input type="text" name="province" id="province" value="{{ shown.province }}"
+                data-saved="{{ values.province }}" maxlength="60" autocomplete="off" required>
+        </div>
+        <div class="form-row">
+            <div class="field">
+                <label for="header_line_1">Line above the barangay name</label>
+                <input type="text" name="header_line_1" id="header_line_1" value="{{ shown.header_line_1 }}"
+                    data-saved="{{ values.header_line_1 }}" maxlength="80" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="header_line_2">Line under the barangay name (optional)</label>
+                <input type="text" name="header_line_2" id="header_line_2" value="{{ shown.header_line_2 }}"
+                    data-saved="{{ values.header_line_2 }}" placeholder="e.g. Office of the Barangay Captain"
+                    maxlength="80" autocomplete="off">
+            </div>
+        </div>
+        <p class="hint">Type the name the way it should print. It appears at the top of every certificate and report,
+            and on the queue slip.</p>
+        <div class="modal-preview" data-preview-slot>
+            <p class="label">Preview</p>
+        </div>
         <div class="modal-actions">
-            <button type="button" class="btn btn-outline" data-close>Stay on this page</button>
-            <button type="button" class="btn btn-danger" id="leave-go">Leave without saving</button>
+            <button type="button" class="btn btn-outline" data-cancel-edit>Cancel</button>
+            <button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save profile</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- EDIT: LOGOS -->
+<dialog class="modal modal-wide" id="edit-logos" data-keep-open data-section="logos">
+    <form action="/settings/logos" method="post" enctype="multipart/form-data" class="modal-body form" id="form-logos">
+        <h2>Edit logos</h2>
+        {{ error_message('logos') }}
+        <p class="hint">Choose a picture to see it in the preview. Nothing is saved until you press Save logos.
+            PNG or JPG, up to 2 MB. A phone photo is fine. Leave a slot empty to leave it out of the header.</p>
+        <div class="logo-grid">
+            {% for slot, info in logos.items() %}
+            <div class="logo-slot" data-slot="{{ slot }}" data-saved-url="{{ info.url or '' }}">
+                <p class="label">{{ info.label }}</p>
+                <div class="logo-box">
+                    <img class="logo-img" alt="" {% if info.url %} src="{{ info.url }}" {% else %} hidden{% endif %}>
+                    <span class="logo-empty" {% if info.url %} hidden{% endif %}>No picture</span>
+                </div>
+                <input type="file" name="logo_{{ slot }}" accept="image/png,image/jpeg,image/webp" hidden>
+                <input type="hidden" name="remove_{{ slot }}" value="0">
+                <p class="logo-msg" role="alert"></p>
+                <div class="row-actions">
+                    <button type="button" class="btn btn-sm btn-outline" data-logo-choose>Choose picture</button>
+                    <button type="button" class="btn btn-sm btn-danger-outline" data-logo-remove>Remove</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="modal-preview" data-preview-slot>
+            <p class="label">Preview</p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-cancel-edit>Cancel</button>
+            <button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save logos</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- EDIT: SIGNATORIES (asks once more before saving, because the names print on every new document) -->
+<dialog class="modal modal-wide" id="edit-signatories" data-keep-open data-section="signatories">
+    <form action="/settings/signatories" method="post" class="modal-body form" id="form-signatories" data-needs-confirm>
+        <h2>Edit signatories</h2>
+        {{ error_message('signatories') }}
+        <div class="form-row">
+            <div class="field">
+                <label for="signatory_captain_name">Barangay Captain: full name</label>
+                <input type="text" name="signatory_captain_name" id="signatory_captain_name"
+                    value="{{ shown.signatory_captain_name }}" data-saved="{{ values.signatory_captain_name }}"
+                    maxlength="80" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="signatory_captain_title">Title</label>
+                <input type="text" name="signatory_captain_title" id="signatory_captain_title"
+                    value="{{ shown.signatory_captain_title }}" data-saved="{{ values.signatory_captain_title }}"
+                    maxlength="60" autocomplete="off" required>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="field">
+                <label for="signatory_secretary_name">Barangay Secretary: full name</label>
+                <input type="text" name="signatory_secretary_name" id="signatory_secretary_name"
+                    value="{{ shown.signatory_secretary_name }}" data-saved="{{ values.signatory_secretary_name }}"
+                    maxlength="80" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="signatory_secretary_title">Title</label>
+                <input type="text" name="signatory_secretary_title" id="signatory_secretary_title"
+                    value="{{ shown.signatory_secretary_title }}" data-saved="{{ values.signatory_secretary_title }}"
+                    maxlength="60" autocomplete="off" required>
+            </div>
+        </div>
+        <p class="hint">New printouts use these names right away. Documents already issued keep the names they were
+            printed with.</p>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-cancel-edit>Cancel</button>
+            <button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save signatories</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- EDIT: DOCUMENT DEFAULTS -->
+<dialog class="modal modal-wide" id="edit-documents" data-keep-open data-section="documents">
+    <form action="/settings/documents" method="post" class="modal-body form" id="form-documents">
+        <h2>Edit document defaults</h2>
+        {{ error_message('documents') }}
+        <div>
+            <div class="field">
+                <label for="control_number_format">Control number style</label>
+                <select name="control_number_format" id="control_number_format"
+                    data-saved="{{ values.control_number_format }}">
+                    {% for key, example in control_formats.items() %}
+                    <option value="{{ key }}" {{ 'selected' if shown.control_number_format==key }}>{{ example }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <p class="hint">The control number is the serial number printed on each certificate. The first part comes from
+            the document type, for example BC for Barangay Clearance. Choose the paper size in the print window when you
+            print.</p>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-cancel-edit>Cancel</button>
+            <button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save document defaults</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- ASKED WHEN CANCELLING WITH CHANGES -->
+<dialog class="modal" id="discard-dialog">
+    <div class="modal-body">
+        <h2>Discard your changes?</h2>
+        <p class="modal-text">You changed something in this window. If you discard, the saved settings stay as they
+            were.</p>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-close>Keep editing</button>
+            <button type="button" class="btn btn-danger" id="discard-go">Discard changes</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- ASKED BEFORE SAVING THE SIGNATORIES -->
+<dialog class="modal" id="names-dialog">
+    <div class="modal-body">
+        <h2>Save these names?</h2>
+        <dl class="settings-values">
+            <dt id="names-captain-title"></dt>
+            <dd id="names-captain"></dd>
+            <dt id="names-secretary-title"></dt>
+            <dd id="names-secretary"></dd>
+        </dl>
+        <p class="modal-text">They will print on every new certificate from now on. Documents already issued keep the
+            names they were printed with.</p>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-close>Go back</button>
+            <button type="button" class="btn btn-primary" id="names-go">Save names</button>
         </div>
     </div>
 </dialog>
@@ -222,61 +326,130 @@
         const $ = (sel, root = document) => root.querySelector(sel);
         const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+        const preview = $('#live-preview');
+        const previewHome = $('#preview-home');
+        let editing = null;            // the Edit window that is open
+        let saving = false;            // true once Save was pressed (the page is about to reload)
 
-        // ---------- Unsaved changes: warn before leaving a section with edits ----------
-        const forms = $$('form[data-title]');
-        const dirtyForms = () => forms.filter((f) => f.dataset.dirty);
-        const leaveDialog = $('#leave-dialog');
-        let proceed = null;
-        let leaving = false;                              // true once the person agreed to leave
+        // ---------- Changes inside a window ----------
+        $$('dialog[data-section] form').forEach((form) => {
+            const markDirty = () => { form.dataset.dirty = '1'; };
+            form.addEventListener('input', markDirty);
+            form.addEventListener('change', markDirty);
+        });
 
-        forms.forEach((f) => {
-            const markDirty = () => { f.dataset.dirty = '1'; };
-            f.addEventListener('input', markDirty);
-            f.addEventListener('change', markDirty);
-            f.addEventListener('submit', () => { delete f.dataset.dirty; });   // saving this one: nothing is lost
+        // Put a form back to what is saved: the boxes, the logo pictures and the preview
+        function restore(form) {
+            $$('[data-saved]', form).forEach((el) => {
+                el.value = el.dataset.saved;
+                el.dispatchEvent(new Event('input'));          // the preview listens for this
+            });
+            $$('.logo-slot', form).forEach((slot) => {
+                $('input[type="file"]', slot).value = '';
+                $('input[type="hidden"]', slot).value = '0';
+                $('.logo-msg', slot).textContent = '';
+                const url = slot.dataset.savedUrl;
+                [$('.logo-img', slot), document.getElementById('pv-' + slot.dataset.slot)].forEach((img) => {
+                    if (!img) return;
+                    if (url) { img.src = url; img.hidden = false; } else { img.removeAttribute('src'); img.hidden = true; }
+                });
+                $('.logo-empty', slot).hidden = Boolean(url);
+            });
+            $$('.alert-error', form).forEach((a) => a.remove());   // an old error no longer applies
+            delete form.dataset.dirty;
+        }
 
-            // Saving one section while another has edits would throw those edits away: ask first
-            $('button[type="submit"]', f).addEventListener('click', (e) => {
-                const others = dirtyForms().filter((o) => o !== f);
-                if (!others.length || leaving) return;
-                e.preventDefault();
-                askLeave(others, () => f.requestSubmit());
+        // ---------- Opening and closing a window ----------
+        function openEdit(dialog) {
+            const slot = $('[data-preview-slot]', dialog);
+            if (slot) slot.appendChild(preview);              // the live preview moves into the window
+            editing = dialog;
+            dialog.showModal();
+            const first = $('input:not([type="hidden"]):not([type="file"]), select', dialog);
+            if (first) first.focus();
+        }
+
+        function closeEdit(dialog) {
+            previewHome.appendChild(preview);                 // and back to the page
+            editing = null;
+            if (dialog.open) dialog.close();
+        }
+
+        // Cancel, Esc: ask first if something was changed
+        function requestClose(dialog) {
+            const form = $('form', dialog);
+            if (!form.dataset.dirty) { closeEdit(dialog); return; }
+            $('#discard-dialog').showModal();
+        }
+
+        $$('[data-edit]').forEach((btn) => btn.addEventListener('click', () => openEdit(document.getElementById(btn.dataset.edit))));
+        $$('[data-cancel-edit]').forEach((btn) => btn.addEventListener('click', () => requestClose(btn.closest('dialog'))));
+        $$('dialog[data-section]').forEach((dialog) => {
+            dialog.addEventListener('cancel', (e) => { e.preventDefault(); requestClose(dialog); });   // Esc key
+            // If the browser closes it anyway (a second Esc), throw the changes away so the page stays true
+            dialog.addEventListener('close', () => {
+                if (saving) return;
+                const form = $('form', dialog);
+                if (form.dataset.dirty) restore(form);
+                if (editing === dialog) closeEdit(dialog);
             });
         });
 
-        function askLeave(list, go) {
-            $('#leave-text').textContent = 'These sections have changes that are not saved: ' +
-                list.map((f) => f.dataset.title).join(', ') + '. If you leave now, those changes are lost.';
-            proceed = go;
-            leaveDialog.showModal();
-        }
-        $('#leave-go').addEventListener('click', () => {
-            leaveDialog.close();
-            leaving = true;
-            if (proceed) proceed();
+        $('#discard-go').addEventListener('click', () => {
+            $('#discard-dialog').close();
+            if (!editing) return;
+            const dialog = editing;
+            restore($('form', dialog));
+            closeEdit(dialog);
         });
 
-        // Any link that leaves the page (sidebar, Cancel...)
-        document.addEventListener('click', (e) => {
-            const link = e.target.closest('a[href]');
-            if (!link || leaving || link.getAttribute('href').startsWith('#')) return;
-            const dirty = dirtyForms();
-            if (!dirty.length) return;
-            e.preventDefault();
-            askLeave(dirty, () => { window.location.href = link.href; });
-        }, true);
+        // ---------- Saving ----------
+        $$('dialog[data-section] form').forEach((form) => {
+            form.addEventListener('submit', () => { saving = true; });
+        });
 
-        // Closing the window, Back button, log out: the browser's own warning, where it supports one
+        // Signatories: show the names once more before they are saved
+        const namesForm = $('#form-signatories');
+        namesForm.addEventListener('submit', (e) => {
+            if (namesForm.dataset.confirmed) return;          // the confirmed second submit: let it through
+            e.preventDefault();
+            saving = false;
+            if (!namesForm.dataset.dirty) {                    // nothing changed: no need to ask
+                saving = true;
+                namesForm.dataset.confirmed = '1';
+                namesForm.requestSubmit();
+                delete namesForm.dataset.confirmed;
+                return;
+            }
+            const typed = (name) => namesForm.elements[name].value.trim().replace(/\s+/g, ' ');
+            $('#names-captain-title').textContent = typed('signatory_captain_title') || 'Barangay Captain';
+            $('#names-captain').textContent = typed('signatory_captain_name') || 'Not filled in';
+            $('#names-secretary-title').textContent = typed('signatory_secretary_title') || 'Barangay Secretary';
+            $('#names-secretary').textContent = typed('signatory_secretary_name') || 'Not filled in';
+            $('#names-dialog').showModal();
+        });
+        $('#names-go').addEventListener('click', () => {
+            $('#names-dialog').close();
+            saving = true;
+            namesForm.dataset.confirmed = '1';
+            namesForm.requestSubmit();
+            delete namesForm.dataset.confirmed;               // so a Back-button return asks again
+        });
+
+        // Closing the app window while a window has changes: the browser's own warning
         window.addEventListener('beforeunload', (e) => {
-            if (leaving || !dirtyForms().length) return;
+            if (saving || !editing || !$('form', editing).dataset.dirty) return;
             e.preventDefault();
             e.returnValue = '';
         });
 
-        // After a failed save, bring the error into view
-        const firstError = $('.settings-section .alert-error');
-        if (firstError) firstError.scrollIntoView({ block: 'center' });
+        // After a failed save, open that window again with the error and what was typed
+        const failed = $('dialog[data-section] .alert-error');
+        if (failed) {
+            const dialog = failed.closest('dialog');
+            openEdit(dialog);
+            if (dialog.dataset.section !== 'logos') $('form', dialog).dataset.dirty = '1';   // the boxes hold what was typed, not what is saved
+        }
     })();
 </script>
 {% endblock %}
