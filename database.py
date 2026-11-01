@@ -128,6 +128,10 @@ class DocumentTemplate(Base):
         #Checking the document is active
         CheckConstraint("is_active IN (0, 1)", name="ck_templates_active"),
         CheckConstraint("print_fee IN (0, 1)", name="ck_templates_print_fee"),
+        # Added in migration v4 (step 8a)
+        CheckConstraint("auto_bold IN (0, 1)", name="ck_templates_auto_bold"),
+        CheckConstraint("auto_indent IN (0, 1)", name="ck_templates_auto_indent"),
+        CheckConstraint("signers IN ('both', 'captain', 'secretary')", name="ck_templates_signers"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -140,6 +144,11 @@ class DocumentTemplate(Base):
     validity_months = Column(Integer, nullable=True)   # None = no expiry
     print_fee = Column(Boolean, nullable=False, default=True, server_default="1")
     is_active = Column(Boolean, nullable=False, default=True, server_default="1")
+    
+    # Added in migration v4 (step 8a). The defaults keep every existing template looking as before.
+    auto_bold = Column(Boolean, nullable=False, default=True, server_default="1")     # filled-in details print bold
+    auto_indent = Column(Boolean, nullable=False, default=True, server_default="1")   # first line of each paragraph indented
+    signers = Column(String, nullable=False, default="both", server_default="both")   # both / captain / secretary
     
 class IssuedDocument(Base):
     """One printed document. Everything is a plain copy so history survives edited templates,
@@ -328,7 +337,30 @@ def _v3_legacy_logo_flag(con):
                    SELECT 'legacy_logos_pending', '1'
                    WHERE EXISTS (SELECT 1 FROM settings WHERE "key" = 'setup_complete' AND value = '1')""")
 
-MIGRATIONS = [_v1_counters_and_indexes, _v2_documents_settings_address, _v3_legacy_logo_flag]
+def _v4_wording_options(con):
+    """Step 8a: three template options, and the control number moves into the wording.
+    - auto_bold, auto_indent: ON, so existing templates look exactly as before.
+    - signers: 'both', as before.
+    - Saved wordings get "Control No.: {Control number}" as their first paragraph, so no template
+      silently loses its printed number (until now the print page added it on its own). Built-in
+      wordings that were never changed (body NULL) get the same line from the code instead.
+      A wording that is already at the length limit is left alone: the Templates tab then shows
+      that it prints no number. Issued documents are NOT touched: their reprints keep the old
+      fixed number line (their snapshot has no "number_in_text")."""
+    _add_column(con, "document_templates", "auto_bold",
+                "BOOLEAN NOT NULL DEFAULT 1 CONSTRAINT ck_templates_auto_bold CHECK (auto_bold IN (0, 1))")
+    _add_column(con, "document_templates", "auto_indent",
+                "BOOLEAN NOT NULL DEFAULT 1 CONSTRAINT ck_templates_auto_indent CHECK (auto_indent IN (0, 1))")
+    _add_column(con, "document_templates", "signers",
+                "VARCHAR NOT NULL DEFAULT 'both' "
+                "CONSTRAINT ck_templates_signers CHECK (signers IN ('both', 'captain', 'secretary'))")
+    line = "Control No.: {Control number}\n\n"
+    con.execute("""UPDATE document_templates SET body = ? || body
+                   WHERE body IS NOT NULL
+                     AND instr(lower(body), '{control number}') = 0
+                     AND length(body) + ? <= 5000""", (line, len(line)))
+
+MIGRATIONS = [_v1_counters_and_indexes, _v2_documents_settings_address, _v3_legacy_logo_flag, _v4_wording_options]
 LATEST = len(MIGRATIONS)
 
 def _has_table(db_file, name):

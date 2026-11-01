@@ -2295,6 +2295,48 @@ fieldset.field legend {
     font-weight: 700;
 }
 
+/* Step 8a: formatting in the wording */
+.wording-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    margin: 10px 0 8px;
+}
+
+.wording-tools .hint {
+    flex: 1 1 260px;
+    margin: 0;
+}
+
+#body {
+    tab-size: 4;
+}
+
+.hint-warn {
+    padding: 10px 14px;
+    border-radius: var(--radius-btn);
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+}
+
+.tpl-body.no-indent p {
+    text-indent: 0;
+}
+
+.tpl-body .tab {
+    display: inline-block;
+    width: 28px;            /* the same width as the automatic indent in the preview */
+}
+
+.tpl-signs.single {
+    justify-content: flex-end;
+}
+
+.tpl-signs.single>div {
+    flex: 0 1 50%;
+}
 .tpl-signs small {
     color: var(--muted);
     font-size: 11px;

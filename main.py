@@ -1983,11 +1983,16 @@ def purge_old_records(request: Request, cutoff: str = Form(...)):
 # SETTINGS (barangay profile, logos, signatories, document defaults) and the FIRST-RUN WIZARD.
 # The wizard and the Settings page share the same helpers, so the same rules apply in both places.
 SETTING_LABELS = {
-    "barangay_name": "Barangay name", "municipality": "Municipality", "province": "Province",
-    "header_line_1": "Header line 1", "header_line_2": "Header line 2",
-    "signatory_captain_name": "Captain name", "signatory_captain_title": "Captain title",
-    "signatory_secretary_name": "Secretary name", "signatory_secretary_title": "Secretary title",
-    "paper_size": "Paper size", "control_number_format": "Control number style",
+    "barangay_name": "Barangay name", 
+    "municipality": "Municipality", 
+    "province": "Province",
+    "header_line_1": "Header line 1", 
+    "header_line_2": "Header line 2",
+    "signatory_captain_name": "Captain name", 
+    "signatory_captain_title": "Captain title",
+    "signatory_secretary_name": "Secretary name", 
+    "signatory_secretary_title": "Secretary title",
+    "control_number_format": "Control number style",
 }
 
 def profile_values(barangay_name, municipality, province, header_line_1, header_line_2) -> dict:
@@ -2280,8 +2285,14 @@ def editor_values(row) -> dict:
     return {"name": row.name, "body": effective_body(row), "code_prefix": row.code_prefix,
             "default_fee": doc_templates.format_fee_input(row.default_fee_centavos),
             "use_validity": row.validity_months is not None, "validity_months": row.validity_months or 6,
-            "extras": [e for e in row.extras.split(",") if e], "print_fee": bool(row.print_fee)}
+            "extras": [e for e in row.extras.split(",") if e], "print_fee": bool(row.print_fee),
+            "auto_bold": bool(row.auto_bold), "auto_indent": bool(row.auto_indent), "signers": row.signers}
 
+def signer_options(b: dict) -> dict:
+    """The choices for "who signs", worded with the titles from Settings."""
+    return {"both": f'{b["secretary_title"]} and {b["captain_title"]}',
+            "captain": f'{b["captain_title"]} only', "secretary": f'{b["secretary_title"]} only'}
+    
 def render_template_editor(request: Request, row, form: dict | None = None, error: str | None = None, status_code: int = 200):
     """`form` is what was typed when a save failed, so nothing is lost."""
     shown = {**editor_values(row), **(form or {})}
@@ -2292,14 +2303,18 @@ def render_template_editor(request: Request, row, form: dict | None = None, erro
         "core_fields": doc_templates.CORE_FIELDS, "extra_menu": doc_templates.EXTRA_MENU,
         "validity_field": doc_templates.VALIDITY_FIELD,
         "available": doc_templates.available_fields(shown["extras"], shown["use_validity"]),
+        "signer_options": signer_options(branding.get_branding()),
     }, status_code=status_code)
 
-def read_template_form(db, template_id, name, body, code_prefix, default_fee, use_validity, validity_months, extras, print_fee):
+def read_template_form(db, template_id, name, body, code_prefix, default_fee, use_validity, validity_months, extras,
+                       print_fee, auto_bold, auto_indent, signers):
     """Returns (values to save, what she typed, error). Exactly one of values / error is None."""
     typed = {"name": clean_text(name, 60), "body": doc_templates.normalize_body(body),
              "code_prefix": code_prefix.strip().upper(), "default_fee": default_fee.strip(),
              "use_validity": use_validity == "1", "validity_months": validity_months.strip() or "6",
-             "extras": doc_templates.clean_extras(extras), "print_fee": print_fee == "1"}
+             "extras": doc_templates.clean_extras(extras), "print_fee": print_fee == "1",
+             "auto_bold": auto_bold == "1", "auto_indent": auto_indent == "1",
+             "signers": signers if signers in doc_templates.SIGNER_CHOICES else "both"}
     try:
         problem = template_name_error(db, typed["name"], template_id)
         if problem:
@@ -2314,7 +2329,8 @@ def read_template_form(db, template_id, name, body, code_prefix, default_fee, us
     if problem:
         return None, typed, problem
     return {"name": typed["name"], "body": typed["body"], "code_prefix": prefix, "default_fee_centavos": fee,
-            "validity_months": months, "extras": ",".join(typed["extras"]), "print_fee": typed["print_fee"]}, typed, None
+            "validity_months": months, "extras": ",".join(typed["extras"]), "print_fee": typed["print_fee"],
+            "auto_bold": typed["auto_bold"], "auto_indent": typed["auto_indent"], "signers": typed["signers"]}, typed, None
 
 @app.get("/documents/templates/{template_id}/edit", dependencies=[Depends(admin_required)])
 def edit_template_page(request: Request, template_id: int):
@@ -2327,13 +2343,15 @@ def edit_template_page(request: Request, template_id: int):
 @app.post("/documents/templates/{template_id}/edit", dependencies=[Depends(admin_required)])
 def save_template(request: Request, template_id: int, name: str = Form(""), body: str = Form(""),
                   code_prefix: str = Form(""), default_fee: str = Form(""), use_validity: str = Form(""),
-                  validity_months: str = Form(""), extras: list[str] = Form(default=[]), print_fee: str = Form("")):
+                  validity_months: str = Form(""), extras: list[str] = Form(default=[]), print_fee: str = Form(""),
+                  auto_bold: str = Form(""), auto_indent: str = Form(""), signers: str = Form("both")):
     with SessionLocal() as db:
         row = db.get(DocumentTemplate, template_id)
         if row is None:
             return RedirectResponse(url="/documents/templates", status_code=303)
         values, typed, error = read_template_form(db, row.id, name, body, code_prefix, default_fee,
-                                                  use_validity, validity_months, extras, print_fee)
+                                                  use_validity, validity_months, extras, print_fee,
+                                                  auto_bold, auto_indent, signers)
         if error:
             return render_template_editor(request, row, form=typed, error=error, status_code=400)
 
@@ -2353,6 +2371,12 @@ def save_template(request: Request, template_id: int, name: str = Form(""), body
             changes.append(f"extra fields \"{row.extras or 'none'}\" -> \"{values['extras'] or 'none'}\"")
         if bool(row.print_fee) != values["print_fee"]:
             changes.append("print fee " + ("on" if values["print_fee"] else "off"))
+        if bool(row.auto_bold) != values["auto_bold"]:
+            changes.append("automatic bold " + ("on" if values["auto_bold"] else "off"))
+        if bool(row.auto_indent) != values["auto_indent"]:
+            changes.append("automatic indent " + ("on" if values["auto_indent"] else "off"))
+        if row.signers != values["signers"]:
+            changes.append(f'signed by {row.signers} -> {values["signers"]}')
 
         # A built-in whose wording is back to the original keeps following the code (nothing saved)
         same_as_original = (row.builtin_key is not None
@@ -2361,6 +2385,7 @@ def save_template(request: Request, template_id: int, name: str = Form(""), body
         row.body = None if same_as_original else values["body"]
         row.default_fee_centavos, row.validity_months = values["default_fee_centavos"], values["validity_months"]
         row.extras, row.print_fee = values["extras"], values["print_fee"]
+        row.auto_bold, row.auto_indent, row.signers = values["auto_bold"], values["auto_indent"], values["signers"]
         db.commit()
         saved_name = values["name"]
     if changes:
@@ -2370,7 +2395,8 @@ def save_template(request: Request, template_id: int, name: str = Form(""), body
 
 @app.post("/documents/templates/preview", dependencies=[Depends(admin_required)])
 def preview_template(body: str = Form(""), default_fee: str = Form(""), use_validity: str = Form(""),
-                     validity_months: str = Form(""), extras: list[str] = Form(default=[])):
+                     validity_months: str = Form(""), extras: list[str] = Form(default=[]),
+                     code_prefix: str = Form(""), auto_bold: str = Form("")):
     """The live preview in the editor: the same code that prints, filled with made-up client details.
     Never raises on half-typed input; it just reports what is wrong so far."""
     extras = doc_templates.clean_extras(extras)
@@ -2385,8 +2411,15 @@ def preview_template(body: str = Form(""), default_fee: str = Form(""), use_vali
         months = None
     text = doc_templates.normalize_body(body)
     error = doc_templates.validate_body(text, doc_templates.available_fields(extras, validity_on))
-    values = doc_templates.sample_values(branding.get_branding(), fee, months, date.today())
-    return JSONResponse({"paragraphs": doc_templates.render_paragraphs(text, values), "error": error})
+    b = branding.get_branding()
+    try:
+        prefix = doc_templates.parse_prefix(code_prefix)
+    except ValueError:
+        prefix = "DOC"
+    example = branding.format_control_number(b["control_number_format"], prefix, date.today().year, 1)
+    values = doc_templates.sample_values(b, fee, months, date.today(), control_number=example)
+    return JSONResponse({"paragraphs": doc_templates.render_paragraphs(text, values, auto_bold == "1"),
+                         "error": error, "has_number": doc_templates.has_control_number(text)})
 
 # ---- restore, duplicate, new, turn on / off, delete
 @app.post("/documents/templates/{template_id}/restore", dependencies=[Depends(admin_required)])
@@ -2414,7 +2447,8 @@ def duplicate_template(request: Request, template_id: int):
         copy = DocumentTemplate(
             builtin_key=None, name=unique_template_name(db, row.name), body=effective_body(row),
             code_prefix=row.code_prefix, extras=row.extras, default_fee_centavos=row.default_fee_centavos,
-            validity_months=row.validity_months, print_fee=row.print_fee, is_active=True)
+            validity_months=row.validity_months, print_fee=row.print_fee, is_active=True,
+            auto_bold=row.auto_bold, auto_indent=row.auto_indent, signers=row.signers)
         db.add(copy)
         db.commit()
         copy_id, copy_name, original = copy.id, copy.name, row.name
@@ -2502,7 +2536,8 @@ def delete_template(request: Request, template_id: int):
 
 # DOCUMENTS: ISSUING (the picker, the form, the print page) AND THE HISTORY
 def signatories_missing(b: dict) -> bool:
-    """Documents carry both signature lines, so both names must be set before anything is issued."""
+    """True when a signatory name is not set. Only the documents signed by that person are blocked
+    (see documents.missing_signers); the picker just warns."""
     return not (b["captain_name"] and b["secretary_name"])
 
 def carry_params(client_name: str, address: str, ticket_number: str, ticket_date: str) -> dict:
@@ -2549,13 +2584,17 @@ def render_issue_form(request: Request, row, form: dict, ticket_number: str, tic
     token = secrets.token_urlsafe(16)               # one use only: a second press of Print, or Back, cannot issue twice
     request.session["issue_token"] = token
     used = doc_templates.fields_used(effective_body(row))
+    b = branding.get_branding()
     return templates.TemplateResponse(request, "document_form.html", {
-        "t": {"id": row.id, "name": row.name, "extras": [e for e in row.extras.split(",") if e]},
+        "t": {"id": row.id, "name": row.name, "extras": [e for e in row.extras.split(",") if e],
+              "auto_indent": bool(row.auto_indent)},
         "shown": form, "error": error, "token": token, "today": date.today().isoformat(),
         "civil_statuses": documents.CIVIL_STATUSES,
         "required": {"address": "Address" in used, "purpose": "Purpose" in used},
         "ticket_number": ticket_number, "ticket_date": ticket_date, "copy_of": copy_of,
-        "names_missing": signatories_missing(branding.get_branding()),
+        "signer_options": signer_options(b),
+        # choice -> titles whose names are missing; the page disables Print for a choice that has any
+        "missing": {choice: documents.missing_signers(b, choice) for choice in doc_templates.SIGNER_CHOICES},
     }, status_code=status_code)
 
 def voided_original(db, copy_of: str, template_id: int):
@@ -2587,13 +2626,17 @@ def issue_form(request: Request, template_id: int, client_name: str = "", addres
             carry["ticket_number"], carry["ticket_date"] = queued.ticket_number, queued.created_at.date().isoformat()
 
         form = {"client_name": carry.get("client_name", ""), "address": carry.get("address", ""), "purpose": "",
-                "issue_date": date.today().isoformat(), "age": "", "civil_status": "", "years": "",
-                "fee": doc_templates.format_fee_input(row.default_fee_centavos), "or_choice": "", "or_number": ""}
+        "issue_date": date.today().isoformat(), "age": "", "civil_status": "",
+        "nationality": documents.DEFAULT_NATIONALITY, "years": "",
+        "fee": doc_templates.format_fee_input(row.default_fee_centavos), "or_choice": "", "or_number": "",
+        "signers": row.signers}
         if original:                                 # a corrected copy starts from the voided one (dated today)
             old = documents.from_json(original.extras, {})
             form.update({"client_name": original.recipient, "address": original.address or "",
                          "purpose": original.purpose or "", "age": old.get("age", ""),
                          "civil_status": old.get("civil_status", ""), "years": old.get("years", ""),
+                         "nationality": old.get("nationality", documents.DEFAULT_NATIONALITY),
+                         "signers": documents.from_json(original.print_snapshot, {}).get("signers", row.signers),
                          "fee": doc_templates.format_fee_input(original.fee_centavos),
                          "or_choice": {"provided": "enter", "not_available": "none"}.get(original.or_status, ""),
                          "or_number": original.or_number or ""})
@@ -2605,14 +2648,14 @@ def issue_form(request: Request, template_id: int, client_name: str = "", addres
 @app.post("/documents/issue/{template_id}/preview", dependencies=[Depends(login_required)])
 def preview_issue(template_id: int, client_name: str = Form(""), address: str = Form(""), purpose: str = Form(""),
                   issue_date: str = Form(""), age: str = Form(""), civil_status: str = Form(""),
-                  years: str = Form(""), fee: str = Form(""), or_choice: str = Form(""), or_number: str = Form("")):
+                  nationality: str = Form(""), years: str = Form(""), fee: str = Form(""), or_choice: str = Form(""), or_number: str = Form("")):
     """The live preview next to the form: the same code that prints, with a [Field name] where
     something is not typed yet. Saves nothing and uses no control number."""
     with SessionLocal() as db:
         row = db.get(DocumentTemplate, template_id)
         if row is None:
             return JSONResponse({"paragraphs": [], "fee_line": None})
-        body, months, print_fee = effective_body(row), row.validity_months, bool(row.print_fee)
+        body, months, print_fee = effective_body(row), row.validity_months, bool(row.print_fee), auto_bold = bool(row.auto_bold)
     try:
         when = documents.parse_issue_date(issue_date, date.today())
     except documents.IssueError:
@@ -2627,8 +2670,9 @@ def preview_issue(template_id: int, client_name: str = Form(""), address: str = 
              "address": clean_text(address, 150) or "[Address]", "purpose": clean_text(purpose, 150) or "[Purpose]",
              "issue_date": when, "fee_centavos": fee_centavos, "or_number": number or None,
              "extras": {"age": clean_text(age, 3) or "[Age]", "civil_status": clean_text(civil_status, 20) or "[Civil status]",
-                        "years": clean_text(years, 3) or "[Years of residence]"}}
-    paragraphs = doc_templates.render_paragraphs(body, documents.values_for(entry, b, months))
+             "nationality": clean_text(nationality, 40) or "[Nationality]", "years": clean_text(years, 3) or "[Years of residence]"}}
+    paragraphs = doc_templates.render_paragraphs(
+        body, documents.values_for(entry, b, months, control_number="[Control number]"), auto_bold)
     return JSONResponse({"paragraphs": paragraphs,
                          "fee_line": documents.fee_line(fee_centavos, "provided" if number else "not_available", number, print_fee)})
 
@@ -2636,7 +2680,8 @@ def preview_issue(template_id: int, client_name: str = Form(""), address: str = 
 def issue_document(request: Request, template_id: int, issue_token: str = Form(""),
                    client_name: str = Form(""), address: str = Form(""), purpose: str = Form(""),
                    issue_date: str = Form(""), age: str = Form(""), civil_status: str = Form(""),
-                   years: str = Form(""), fee: str = Form(""), or_choice: str = Form(""), or_number: str = Form(""),
+                   nationality: str = Form(""), years: str = Form(""), fee: str = Form(""), or_choice: str = Form(""),
+                   or_number: str = Form(""), signers: str = Form(""),
                    ticket_number: str = Form(""), ticket_date: str = Form(""), copy_of: str = Form("")):
     expected = request.session.pop("issue_token", None)
     if not expected or not secrets.compare_digest(expected, issue_token):
@@ -2646,9 +2691,10 @@ def issue_document(request: Request, template_id: int, issue_token: str = Form("
     ticket_number = ticket_number if TICKET_RE.match(ticket_number) else ""
     ticket_day = parse_date(ticket_date) if ticket_number else None
     raw = {"client_name": clean_text(client_name, 100), "address": clean_text(address, 150),
-           "purpose": clean_text(purpose, 150), "issue_date": issue_date.strip(), "age": age.strip(),
-           "civil_status": civil_status.strip(), "years": years.strip(), "fee": fee.strip(),
-           "or_choice": or_choice.strip(), "or_number": clean_text(or_number, 40)}
+        "purpose": clean_text(purpose, 150), "issue_date": issue_date.strip(), "age": age.strip(),
+        "civil_status": civil_status.strip(), "nationality": clean_text(nationality, 40), "years": years.strip(),
+        "fee": fee.strip(), "or_choice": or_choice.strip(), "or_number": clean_text(or_number, 40),
+        "signers": signers.strip()}
     b = branding.get_branding()
     with SessionLocal() as db:
         row = db.get(DocumentTemplate, template_id)
@@ -2664,8 +2710,6 @@ def issue_document(request: Request, template_id: int, issue_token: str = Form("
             return render_issue_form(request, row, raw, ticket_number, ticket_date if ticket_day else "",
                                      str(original.id) if original else "", message, 400)
 
-        if signatories_missing(b):
-            return fail("The names of the Barangay Captain and Secretary are not set. Fill them in under Settings, then try again.")
         body = effective_body(row)
         extras = [e for e in row.extras.split(",") if e]
         problem = doc_templates.validate_body(body, doc_templates.available_fields(extras, row.validity_months is not None))
@@ -2675,18 +2719,26 @@ def issue_document(request: Request, template_id: int, issue_token: str = Form("
             entry = documents.read_issue_form(raw, body=body, extras=extras, today=date.today())
         except documents.IssueError as e:
             return fail(str(e))
+        missing = documents.missing_signers(b, entry["signers"])
+        if missing:
+            return fail(f"The name of the {' and the '.join(missing)} is not set. Fill it in under Settings, "
+                        "or choose another signer, then try again.")
 
-        paragraphs = doc_templates.render_paragraphs(body, documents.values_for(entry, b, row.validity_months))
         admin = get_current_admin(request)
         try:
+            # The number first, then the wording: {Control number} is filled in with it. Both are in
+            # the same save, so a failed save gives the number back (no gap).
             number = issue_control_number(db, row.code_prefix, date.today().year, b["control_number_format"])
+            paragraphs = doc_templates.render_paragraphs(
+                body, documents.values_for(entry, b, row.validity_months, control_number=number), bool(row.auto_bold))
             record = IssuedDocument(
                 control_number=number, template_id=row.id, template_name=row.name, recipient=entry["client_name"],
                 address=entry["address"] or None, purpose=entry["purpose"] or None, issue_date=entry["issue_date"],
                 extras=documents.to_json(entry["extras"]), fee_centavos=entry["fee_centavos"],
                 or_number=entry["or_number"], or_status=entry["or_status"],
                 final_text=documents.to_json(paragraphs),                      # frozen: a later template edit never changes it
-                print_snapshot=documents.to_json(documents.make_snapshot(b, row.print_fee)),
+                print_snapshot=documents.to_json(documents.make_snapshot(
+                    b, row.print_fee, signers=entry["signers"], auto_indent=bool(row.auto_indent))),
                 issued_by=admin.username if admin else "unknown",
                 ticket_number=ticket_number or None, ticket_date=ticket_day, status="issued",
                 created_at=datetime.now())
@@ -2723,12 +2775,16 @@ def print_document(request: Request, doc_id: int, first: str = ""):
         log_action("Documents", "Document Reprinted", f"Opened {view['control_number']} for printing", request)
     return templates.TemplateResponse(request, "document_print.html", {
         "rec": view, "voided": voided, "first": is_first, "has_ticket": has_ticket,
-        "paragraphs": paragraphs, "fee_line": fee_text,
+        "paragraphs": paragraphs, "fee_line": fee_text, "tab": doc_templates.TAB,
+        # Documents issued before step 8a: indented, both signers, and the number on its own fixed line
+        "auto_indent": snapshot.get("auto_indent", True), "number_line": not snapshot.get("number_in_text", False),
+        "sign_lines": [{"name": snapshot.get(f"{who}_name", b[f"{who}_name"]),
+                        "title": snapshot.get(f"{who}_title", b[f"{who}_title"])}
+                       for who in documents.SIGNER_LINES.get(snapshot.get("signers", "both"), documents.SIGNER_LINES["both"])],
         # Names and header lines come from the saved copy (as issued); the logos are today's
         "hdr": {"full_name": snapshot.get("full_name", b["full_name"]),
                 "header_line_1": snapshot.get("header_line_1", b["header_line_1"]),
                 "header_line_2": snapshot.get("header_line_2", b["header_line_2"]), "logos": b["logos"]},
-        "signers": {k: snapshot.get(k, b[k]) for k in ("captain_name", "captain_title", "secretary_name", "secretary_title")},
     })
     
 # ---- the history (the "Issued documents" tab)

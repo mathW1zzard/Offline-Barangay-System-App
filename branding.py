@@ -32,7 +32,6 @@ DEFAULTS = {
     "signatory_secretary_name": "",
     "signatory_secretary_title": "Barangay Secretary",
     # Document defaults
-    "paper_size": "A4",
     "control_number_format": "PREFIX-YEAR-NNNN",
     # Housekeeping
     "setup_complete": "",
@@ -40,14 +39,6 @@ DEFAULTS = {
     "wizard_step": "profile",     # where the first-run wizard resumes: profile / logos / signatories / finish
     "wizard_later": "", 
 }
-
-PAPER_SIZES = {                     # what the secretary sees
-    "A4": "A4 (210 x 297 mm)",
-    "Letter": "Short bond / Letter (8.5 x 11 in)",
-    "Long": "Long bond (8.5 x 13 in)",
-}
-PAPER_CSS = {"A4": "A4", "Letter": "letter", "Long": "8.5in 13in"}   # for the CSS "@page size" (used from step 5)
-
 
 def format_control_number(style: str, prefix: str, year: int, number: int) -> str:
     """BC + 2026 + 7 -> 'BC-2026-0007' (the style decides the order and the digits). Used from step 5."""
@@ -229,7 +220,6 @@ def get_branding(values: dict | None = None) -> dict:
         "captain_title": v["signatory_captain_title"],
         "secretary_name": v["signatory_secretary_name"],
         "secretary_title": v["signatory_secretary_title"],
-        "paper_size": v["paper_size"],
         "control_number_format": v["control_number_format"],
     }
     

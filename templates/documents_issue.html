@@ -13,9 +13,8 @@
 {{ documents_tabs('issue') }}
 
 {% if names_missing %}
-<div class="alert alert-warn" role="status">The names of the Barangay Captain and Secretary are not set yet, so
-    documents cannot be issued.
-    Fill them in under <a href="/settings#signatories">Settings</a>.</div>
+<div class="alert alert-warn" role="status">A signatory name is not set yet, so documents signed by that person
+    cannot be printed. Fill in the names under <a href="/settings#signatories">Settings</a>.</div>
 {% endif %}
 
 <section class="card">

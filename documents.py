@@ -6,6 +6,7 @@ from datetime import date, timedelta
 import doc_templates
 
 CIVIL_STATUSES = ("Single", "Married", "Widowed", "Separated")
+DEFAULT_NATIONALITY = "Filipino"
 MIN_DATE = date(2000, 1, 1)
 OR_ENTER, OR_NONE = "enter", "none"          # the two choices when a fee was charged
 
@@ -55,6 +56,10 @@ def read_issue_form(raw: dict, *, body: str, extras: list, today: date) -> dict:
     if "years" in extras:
         extra_values["years"] = str(_whole_number(raw["years"], 0, 120,
                                                   "Please enter the years of residence as a number from 0 to 120."))
+    if "nationality" in extras:
+        if not raw["nationality"]:
+            raise IssueError("Please enter the nationality, for example Filipino.")
+        extra_values["nationality"] = raw["nationality"]
     try:
         fee = doc_templates.parse_fee(raw["fee"])
     except ValueError as e:
@@ -75,15 +80,16 @@ def read_issue_form(raw: dict, *, body: str, extras: list, today: date) -> dict:
             "or_status": or_status, "or_number": or_number}
 
 
-def values_for(entry: dict, branding: dict, validity_months) -> dict:
-    """Field -> printed text, from a checked form (or from a saved record)."""
+def values_for(entry: dict, branding: dict, validity_months, control_number: str = "") -> dict:
+    """Field -> printed text, from a checked form (or from a saved record). The control number is
+    passed only when issuing (it is created first, then the wording is filled in)."""
     extras = entry["extras"]
     return doc_templates.field_values(
         client_name=entry["client_name"], address=entry["address"] or "", purpose=entry["purpose"] or "",
         issue_date=entry["issue_date"], barangay_name=branding["name"], municipality=branding["municipality"],
         province=branding["province"], age=extras.get("age", ""), civil_status=extras.get("civil_status", ""),
-        years=extras.get("years", ""), fee_centavos=entry["fee_centavos"], or_number=entry["or_number"] or "",
-        validity_months=validity_months)
+        nationality=extras.get("nationality", ""), years=extras.get("years", ""), fee_centavos=entry["fee_centavos"],
+        or_number=entry["or_number"] or "", validity_months=validity_months, control_number=control_number)
 
 
 def fee_line(fee_centavos: int, or_status: str, or_number, print_fee: bool):
@@ -97,12 +103,25 @@ def fee_line(fee_centavos: int, or_status: str, or_number, print_fee: bool):
     return line
 
 
-def make_snapshot(branding: dict, print_fee: bool) -> dict:
-    """What a reprint must not take from today's Settings: names, titles and header lines as they
-    were when the document was issued. (Logos stay current.)"""
+# Who signs, as (snapshot key prefix, ...) in the order the signature lines print, left to right
+SIGNER_LINES = {"both": ("secretary", "captain"), "captain": ("captain",), "secretary": ("secretary",)}
+
+
+def missing_signers(branding: dict, signers: str) -> list:
+    """The titles of the chosen signers whose names are not set yet ([] when all are set)."""
+    return [branding[f"{who}_title"] or who.title() for who in SIGNER_LINES.get(signers, ())
+            if not branding[f"{who}_name"]]
+
+
+def make_snapshot(branding: dict, print_fee: bool, *, signers: str = "both", auto_indent: bool = True) -> dict:
+    """What a reprint must not take from today's Settings or template: names, titles and header lines
+    as they were when the document was issued, who signed, and the indent rule. (Logos stay current.)
+    number_in_text marks documents issued since step 8a: their control number is part of the saved
+    wording (where the template put it), so the print page does not add its own fixed line."""
     keys = ("full_name", "header_line_1", "header_line_2", "captain_name", "captain_title",
             "secretary_name", "secretary_title")
-    return {**{k: branding[k] for k in keys}, "print_fee": bool(print_fee)}
+    return {**{k: branding[k] for k in keys}, "print_fee": bool(print_fee), "signers": signers,
+            "auto_indent": bool(auto_indent), "number_in_text": True}
 
 
 def to_json(value) -> str:

@@ -2,7 +2,8 @@
 paragraphs. No web code and no database code, so it can be tested on its own.
 
 A template body is plain text with fields in curly brackets, like {Client name}. Fields are replaced
-one by one with plain text; the body is NEVER run as code.
+one by one with plain text; the body is NEVER run as code. Two marks are understood as well:
+**double asterisks** around words print them in bold, and a Tab prints a fixed gap (an indent).
 """
 import calendar
 import difflib
@@ -15,12 +16,14 @@ MONTHS = ("January", "February", "March", "April", "May", "June", "July",
 
 # ---------------------------------------------------------------- the fields a text may use
 CORE_FIELDS = ("Client name", "Address", "Purpose", "Issue date", "Issue day", "Issue month", "Issue year",
-               "Barangay name", "Municipality", "Province")
+               "Barangay name", "Municipality", "Province", "Control Number")
+CONTROL_FIELD = "Control number"        # filled in when the document is issued (the number does not exist before)
 
 # The fixed menu of extras: key -> (label on the form, fields it adds). OR number and fee come as a pair.
 EXTRA_MENU = {
     "age": ("Age", ("Age",)),
     "civil_status": ("Civil status", ("Civil status",)),
+    "nationality": ("Nationality", ("Nationality",)),
     "years": ("Years of residence", ("Years of residence",)),
     "fee": ("Fee and OR number", ("Fee", "OR number")),
 }
@@ -31,6 +34,12 @@ ALL_FIELDS = CORE_FIELDS + tuple(_OWNER) + (VALIDITY_FIELD,)
 
 MAX_BODY_CHARS = 5000
 TOKEN = re.compile(r"\{([^{}\n]*)\}")
+BOLD_MARK = "**"
+TAB = "\t"                             # a frozen piece of exactly this text prints as a fixed gap
+
+# The line the v4 upgrade puts at the top of saved wordings, and that the built-in wordings start with
+CONTROL_LINE = "Control No.: {Control number}"
+SIGNER_CHOICES = ("both", "captain", "secretary")
 
 
 def _norm(name: str) -> str:
@@ -66,6 +75,11 @@ def validate_body(body: str, available) -> str | None:
         return f"The wording is too long ({MAX_BODY_CHARS} characters at most)."
     if "{" in TOKEN.sub("", body) or "}" in TOKEN.sub("", body):
         return "There is a { or } that is not part of a field. Fields look like {Client name}."
+    for chunk in _paragraph_chunks(body):
+        if chunk.count(BOLD_MARK) % 2:
+            start = " ".join(chunk.split())[:40]
+            return (f'A bold mark ** is not closed in the paragraph that starts "{start}". '
+                    "Bold text must start and end with ** in the same paragraph, like **this**.")
     allowed = {_norm(f) for f in available}
     everything = {_norm(f): f for f in ALL_FIELDS}
     for match in TOKEN.finditer(body):
@@ -84,40 +98,75 @@ def validate_body(body: str, available) -> str | None:
     return None
 
 # ---------------------------------------------------------------- from text to paragraphs
+
 def normalize_body(text: str) -> str:
-    """One newline style, no trailing spaces, at most one blank line in a row."""
+    """One newline style, no trailing spaces, at most one blank line in a row. A Tab at the very
+    start is kept (it is an indent the secretary typed), so only newlines and spaces are trimmed."""
     text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
     text = "\n".join(line.rstrip() for line in text.split("\n"))
-    return re.sub(r"\n{3,}", "\n\n", text).strip()
+    return re.sub(r"\n{3,}", "\n\n", text).strip("\n ")
 
 
-def render_paragraphs(body: str, values: dict) -> list:
-    """Body + field values -> paragraphs, each a list of [text, bold] pairs. A blank line starts a new
-    paragraph; a single line break is just a space. Field values are bold. An unknown {field} is left
-    exactly as typed (saving is blocked on those, so this only shows while she is still typing).
-    The same structure is what is frozen on an issued document."""
+def _paragraph_chunks(body: str) -> list:
+    """A blank line starts a new paragraph."""
+    return [c for c in re.split(r"\n[ \t]*\n", normalize_body(body)) if c.strip()]
+
+
+def _flatten(chunk: str) -> str:
+    """Inside a paragraph, line breaks and runs of spaces become one space (as before). Tabs are
+    kept, without the spaces around them, so a typed indent survives."""
+    text = re.sub(r"[ \n\f\v]+", " ", chunk).strip(" ")
+    return re.sub(r" *\t *", TAB, text)
+
+
+def _add(pairs: list, text: str, bold: bool) -> None:
+    """Add a piece, splitting out tabs and joining it to the previous piece when the style matches."""
+    for i, part in enumerate(text.split(TAB)):
+        if i:
+            pairs.append([TAB, False])
+        if not part:
+            continue
+        if pairs and pairs[-1][1] == bold and pairs[-1][0] != TAB:
+            pairs[-1][0] += part
+        else:
+            pairs.append([part, bold])
+
+
+def render_paragraphs(body: str, values: dict, auto_bold: bool = True) -> list:
+    """Body + field values -> paragraphs, each a list of [text, bold] pairs. A piece whose text is
+    exactly a Tab prints as a gap. Text between ** marks is bold; with auto_bold, filled-in values
+    are bold too. An unknown {field} is left exactly as typed (saving is blocked on those, so this
+    only shows while she is still typing). An unclosed ** (also blocked on saving) prints as typed.
+    The same structure is what is frozen on an issued document. Values are inserted AFTER the bold
+    marks are read, so ** typed by a client (in a name, say) never turns anything bold."""
     known = {_norm(k): v for k, v in values.items()}
     paragraphs = []
-    for chunk in re.split(r"\n\s*\n", normalize_body(body)):
-        text = " ".join(chunk.split())
-        if not text:
-            continue
-        pairs, last = [], 0
-        for match in TOKEN.finditer(text):
-            key = _norm(match.group(1))
-            if key not in known:
-                continue
-            if match.start() > last:
-                pairs.append([text[last:match.start()], False])
-            if known[key]:
-                pairs.append([known[key], True])
-            last = match.end()
-        if last < len(text):
-            pairs.append([text[last:], False])
-        paragraphs.append(pairs)
+    for chunk in _paragraph_chunks(body):
+        text = _flatten(chunk)
+        segments = text.split(BOLD_MARK)
+        if len(segments) % 2 == 0:                 # an odd number of marks: the last one is plain text
+            segments[-2:] = [segments[-2] + BOLD_MARK + segments[-1]]
+        pairs = []
+        for index, segment in enumerate(segments):
+            marked = index % 2 == 1                # between two marks
+            last = 0
+            for match in TOKEN.finditer(segment):
+                key = _norm(match.group(1))
+                if key not in known:
+                    continue
+                _add(pairs, segment[last:match.start()], marked)
+                if known[key]:
+                    _add(pairs, known[key], marked or auto_bold)
+                last = match.end()
+            _add(pairs, segment[last:], marked)
+        if pairs:
+            paragraphs.append(pairs)
     return paragraphs
 
-# ---------------------------------------------------------------- field values
+
+def has_control_number(body: str) -> bool:
+    return CONTROL_FIELD in fields_used(body or "")
+
 def ordinal(n: int) -> str:
     suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
     return f"{n}{suffix}"
@@ -134,8 +183,8 @@ def format_pesos(centavos: int) -> str:
 
 
 def field_values(*, client_name="", address="", purpose="", issue_date: date, barangay_name="", municipality="",
-                 province="", age="", civil_status="", years="", fee_centavos=0, or_number="",
-                 validity_months=None) -> dict:
+                 province="", age="", civil_status="", nationality="", years="", fee_centavos=0, or_number="",
+                 validity_months=None, control_number="") -> dict:
     """Every field -> the text it prints. Used with sample data here and with real data when issuing."""
     values = {
         "Client name": client_name, "Address": address, "Purpose": purpose,
@@ -143,7 +192,8 @@ def field_values(*, client_name="", address="", purpose="", issue_date: date, ba
         "Issue day": ordinal(issue_date.day), "Issue month": MONTHS[issue_date.month - 1],
         "Issue year": str(issue_date.year),
         "Barangay name": barangay_name, "Municipality": municipality, "Province": province,
-        "Age": age, "Civil status": civil_status, "Years of residence": years,
+        "Age": age, "Civil status": civil_status, "Nationality": nationality, "Years of residence": years,
+        "Control number": control_number,
         "Fee": format_pesos(fee_centavos) if fee_centavos > 0 else "No fee",
         "OR number": or_number,
     }
@@ -153,13 +203,14 @@ def field_values(*, client_name="", address="", purpose="", issue_date: date, ba
     return values
 
 
-def sample_values(branding: dict, fee_centavos: int, validity_months, today: date) -> dict:
+def sample_values(branding: dict, fee_centavos: int, validity_months, today: date, control_number="") -> dict:
     """What the live preview fills in. The barangay's own name is real; the client is made up."""
     return field_values(
         client_name="Juan Dela Cruz", address="Purok 1, Sample Street", purpose="employment",
         issue_date=today, barangay_name=branding["name"], municipality=branding["municipality"],
-        province=branding["province"], age="35", civil_status="Single", years="10",
-        fee_centavos=fee_centavos, or_number="1234567", validity_months=validity_months)
+        province=branding["province"], age="35", civil_status="Single", nationality="Filipino", years="10",
+        fee_centavos=fee_centavos, or_number="1234567", validity_months=validity_months,
+        control_number=control_number)
 
 
 # ---------------------------------------------------------------- reading what was typed in the editor
@@ -211,13 +262,13 @@ _PURPOSE = ("This certification is issued upon the request of the above-named pe
 BUILTINS = {
     "residency_en": {
         "name": "Certificate of Residency", "prefix": "CR",
-        "body": ("TO WHOM IT MAY CONCERN:\n\n"
+        "body": (CONTROL_LINE + "\n\nTO WHOM IT MAY CONCERN:\n\n"
                  "This is to certify that {Client name} is a resident of {Address}, {Barangay name}, "
                  "{Municipality}, {Province}.\n\n" + _PURPOSE + "\n\n" + _CLOSING),
     },
     "clearance_en": {
         "name": "Barangay Clearance", "prefix": "BC",
-        "body": ("TO WHOM IT MAY CONCERN:\n\n"
+        "body": (CONTROL_LINE + "\n\nTO WHOM IT MAY CONCERN:\n\n"
                  "This is to certify that {Client name}, a resident of {Address}, {Barangay name}, "
                  "{Municipality}, {Province}, has no derogatory record on file in this office as of this date.\n\n"
                  "This clearance is issued upon the request of the above-named person for {Purpose} "
@@ -225,14 +276,14 @@ BUILTINS = {
     },
     "indigency_en": {
         "name": "Certificate of Indigency", "prefix": "CI",
-        "body": ("TO WHOM IT MAY CONCERN:\n\n"
+        "body": (CONTROL_LINE + "\n\nTO WHOM IT MAY CONCERN:\n\n"
                  "This is to certify that {Client name}, a resident of {Address}, {Barangay name}, "
                  "{Municipality}, {Province}, belongs to an indigent family in this barangay.\n\n" + _PURPOSE
                  + "\n\n" + _CLOSING),
     },
     "blank_en": {
         "name": "Blank Document", "prefix": "DOC",
-        "body": "TO WHOM IT MAY CONCERN:\n\n{Purpose}\n\n" + _CLOSING,
+        "body": CONTROL_LINE + "\n\nTO WHOM IT MAY CONCERN:\n\n{Purpose}\n\n" + _CLOSING,
     },
 }
 

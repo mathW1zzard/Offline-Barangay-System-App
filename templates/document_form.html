@@ -11,9 +11,9 @@
 {{ documents_tabs('issue') }}
 
 {% if names_missing %}
-<div class="alert alert-warn" role="status">The names of the Barangay Captain and Secretary are not set yet, so this
-    document cannot be printed.
-    Fill them in under <a href="/settings#signatories">Settings</a>.</div>
+<div class="alert alert-warn" role="status" id="names-warning" hidden>The name of the <span id="names-missing"></span>
+    is not set yet, so this document cannot be printed with the signer you chose. Fill it in under
+    <a href="/settings#signatories">Settings</a>, or choose another signer.</div>
 {% endif %}
 
 <div class="editor-layout">
@@ -54,7 +54,7 @@
                 <p class="hint">Keep today's date unless you are recording a document that was issued earlier.</p>
             </div>
 
-            {% if 'age' in t.extras or 'civil_status' in t.extras or 'years' in t.extras %}
+            {% if 'age' in t.extras or 'civil_status' in t.extras or 'nationality' in t.extras or 'years' in t.extras %}
             <div class="form-row">
                 {% if 'age' in t.extras %}
                 <div class="field">
@@ -73,6 +73,13 @@
                     </select>
                 </div>
                 {% endif %}
+                {% if 'nationality' in t.extras %}
+                <div class="field">
+                    <label for="nationality">Nationality</label>
+                    <input type="text" name="nationality" id="nationality" value="{{ shown.nationality }}"
+                        maxlength="40" autocomplete="off" required>
+                </div>
+                {% endif %}                
                 {% if 'years' in t.extras %}
                 <div class="field">
                     <label for="years">Years of residence</label>
@@ -82,7 +89,17 @@
                 {% endif %}
             </div>
             {% endif %}
-
+            
+            <div class="field">
+                <label for="signers">Signed by</label>
+                <select name="signers" id="signers">
+                    {% for key, label in signer_options.items() %}
+                    <option value="{{ key }}"{% if shown.signers == key %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <p class="hint">Starts on the usual choice for this document. Change it only for this one if needed.</p>
+            </div>
+            
             <fieldset class="field">
                 <legend>Fee</legend>
                 <div class="field">
@@ -112,8 +129,7 @@
 
             <div class="form-actions">
                 <a href="/documents" class="btn btn-outline">Cancel</a>
-                <button type="submit" class="btn btn-primary btn-lg" {% if names_missing %} disabled{% endif %}>{{
-                    icon('printer', 20) }} Print</button>
+                <button type="submit" class="btn btn-primary btn-lg" id="btn-print">{{ icon('printer', 20) }} Print</button>
             </div>
         </form>
     </section>
@@ -123,16 +139,16 @@
             <h2 class="card-title">Preview</h2>
             <div class="paper-preview">
                 {{ doc_header(branding) }}
-                <p class="control-line">Control No.: <em>assigned when you press Print</em></p>
                 <h2 class="tpl-title">{{ t.name|upper }}</h2>
-                <div class="tpl-body" id="tpl-body"></div>
+                <div class="tpl-body{% if not t.auto_indent %} no-indent{% endif %}" id="tpl-body"></div>
                 <p class="fee-line" id="fee-line" hidden></p>
-                <div class="tpl-signs">
-                    <div><span class="tpl-sign-name">{{ branding.secretary_name|upper }}</span><small>{{
+                <div class="tpl-signs" id="tpl-signs">
+                    <div data-signer="secretary"><span class="tpl-sign-name">{{ branding.secretary_name|upper }}</span><small>{{
                             branding.secretary_title }}</small></div>
-                    <div><span class="tpl-sign-name">{{ branding.captain_name|upper }}</span><small>{{
+                    <div data-signer="captain"><span class="tpl-sign-name">{{ branding.captain_name|upper }}</span><small>{{
                             branding.captain_title }}</small></div>
                 </div>
+                <p class="hint">[Control number] is filled in when you press Print.</p>
             </div>
         </section>
     </aside>
@@ -140,6 +156,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/doc_preview.js"></script>
 <script>
     (() => {
         const $ = (sel, root = document) => root.querySelector(sel);
@@ -169,18 +186,21 @@
             e.currentTarget.href = '/documents' + (query ? '?' + query : '');
         });
 
-        // The preview is made by the server, so it is exactly what will print
-        function draw(paragraphs) {
-            previewBody.replaceChildren(...paragraphs.map((pairs) => {
-                const p = document.createElement('p');
-                pairs.forEach(([text, bold]) => {
-                    const piece = document.createElement(bold ? 'strong' : 'span');
-                    piece.textContent = text;                 // text only: nothing typed can become markup
-                    p.appendChild(piece);
-                });
-                return p;
-            }));
+
+        // Who signs: show those signature lines, and stop Print when a chosen signer has no name yet
+        const missing = {{ missing|tojson }};
+        function syncSigners() {
+            const choice = $('#signers').value;
+            window.showDocSigners($('#tpl-signs'), choice);
+            const gaps = missing[choice] || [];
+            $('#names-missing').textContent = gaps.join(' and the ');
+            $('#names-warning').hidden = !gaps.length;
+            $('#btn-print').disabled = gaps.length > 0;
         }
+
+        // The preview is made by the server, so it is exactly what will print
+        const draw = (paragraphs) => window.drawDocParagraphs(previewBody, paragraphs);
+        
         let timer = null;
         let latest = 0;
         async function refresh() {
@@ -197,8 +217,9 @@
         }
         const schedule = () => { clearTimeout(timer); timer = setTimeout(refresh, 250); };
         form.addEventListener('input', () => { syncFee(); schedule(); });
-        form.addEventListener('change', () => { syncFee(); schedule(); });
+        form.addEventListener('change', () => { syncFee(); syncSigners(); schedule(); });
         syncFee();
+        syncSigners();
         refresh();
     })();
 </script>
