@@ -2,8 +2,10 @@
 paragraphs. No web code and no database code, so it can be tested on its own.
 
 A template body is plain text with fields in curly brackets, like {Client name}. Fields are replaced
-one by one with plain text; the body is NEVER run as code. Two marks are understood as well:
-**double asterisks** around words print them in bold, and a Tab prints a fixed gap (an indent).
+one by one with plain text; the body is NEVER run as code. A few marks are understood as well:
+**double asterisks** around words print them in bold, a Tab prints a fixed gap (an indent), and a
+line that starts with >> is centred (>>> : on the right). A blank line starts a new paragraph; one
+Enter starts a new line in the same paragraph.
 """
 import calendar
 import difflib
@@ -16,7 +18,7 @@ MONTHS = ("January", "February", "March", "April", "May", "June", "July",
 
 # ---------------------------------------------------------------- the fields a text may use
 CORE_FIELDS = ("Client name", "Address", "Purpose", "Issue date", "Issue day", "Issue month", "Issue year",
-               "Barangay name", "Municipality", "Province", "Control Number")
+               "Barangay name", "Municipality", "Province", "Control number")
 CONTROL_FIELD = "Control number"        # filled in when the document is issued (the number does not exist before)
 
 # The fixed menu of extras: key -> (label on the form, fields it adds). OR number and fee come as a pair.
@@ -25,6 +27,7 @@ EXTRA_MENU = {
     "civil_status": ("Civil status", ("Civil status",)),
     "nationality": ("Nationality", ("Nationality",)),
     "years": ("Years of residence", ("Years of residence",)),
+    "ctc": ("CTC (Community Tax Certificate)", ("CTC number", "CTC issued at", "CTC issued on")),
     "fee": ("Fee and OR number", ("Fee", "OR number")),
 }
 VALIDITY_FIELD = "Valid until"          # available only when the template has a validity in months
@@ -36,6 +39,11 @@ MAX_BODY_CHARS = 5000
 TOKEN = re.compile(r"\{([^{}\n]*)\}")
 BOLD_MARK = "**"
 TAB = "\t"                             # a frozen piece of exactly this text prints as a fixed gap
+BREAK = "\n"                           # ... a new line in the same paragraph (step 8c)
+CENTER = "\x01center"                  # ... at the start of a line: that line is centred
+RIGHT = "\x01right"                    # ... at the start of a line: that line is on the right
+CENTER_MARK, RIGHT_MARK = ">>", ">>>"   # what the secretary types (or the Center / Right buttons put) at the start of a line
+_SPECIAL = {"\t": TAB, "\n": BREAK, "\x02": CENTER, "\x03": RIGHT}
 
 # The line the v4 upgrade puts at the top of saved wordings, and that the built-in wordings start with
 CONTROL_LINE = "Control No.: {Control number}"
@@ -98,7 +106,6 @@ def validate_body(body: str, available) -> str | None:
     return None
 
 # ---------------------------------------------------------------- from text to paragraphs
-
 def normalize_body(text: str) -> str:
     """One newline style, no trailing spaces, at most one blank line in a row. A Tab at the very
     start is kept (it is an indent the secretary typed), so only newlines and spaces are trimmed."""
@@ -113,23 +120,50 @@ def _paragraph_chunks(body: str) -> list:
 
 
 def _flatten(chunk: str) -> str:
-    """Inside a paragraph, line breaks and runs of spaces become one space (as before). Tabs are
-    kept, without the spaces around them, so a typed indent survives."""
-    text = re.sub(r"[ \n\f\v]+", " ", chunk).strip(" ")
-    return re.sub(r" *\t *", TAB, text)
+    """One paragraph -> one string. Each line keeps its own place (an Enter is a new line, step 8c);
+    inside a line, runs of spaces become one space. Tabs are kept, without the spaces around them.
+    A line that starts with >>> or >> gets a hidden sign for "right" or "centre" in front."""
+    lines = []
+    for line in chunk.split("\n"):
+        line = line.strip(" ")
+        sign = ""
+        if line.startswith(RIGHT_MARK):
+            sign, line = "\x03", line[len(RIGHT_MARK):]
+        elif line.startswith(CENTER_MARK):
+            sign, line = "\x02", line[len(CENTER_MARK):]
+        line = re.sub(r"[ \f\v\x01-\x03]+", " ", line).strip(" ")
+        lines.append(sign + re.sub(r" *\t *", TAB, line))
+    return "\n".join(lines)
 
 
 def _add(pairs: list, text: str, bold: bool) -> None:
-    """Add a piece, splitting out tabs and joining it to the previous piece when the style matches."""
-    for i, part in enumerate(text.split(TAB)):
-        if i:
-            pairs.append([TAB, False])
+    """Add a piece, splitting out tabs, line breaks and alignment signs, and joining it to the
+    previous piece when the style matches."""
+    for part in re.split(r"(\t|\n|\x02|\x03)", text):
         if not part:
             continue
-        if pairs and pairs[-1][1] == bold and pairs[-1][0] != TAB:
+        if part in _SPECIAL:
+            pairs.append([_SPECIAL[part], False])
+        elif pairs and pairs[-1][1] == bold and pairs[-1][0] not in _SPECIAL.values():
             pairs[-1][0] += part
         else:
             pairs.append([part, bold])
+
+
+def paragraph_lines(pairs: list) -> list:
+    """A frozen paragraph -> its lines, each {"align": "left"/"center"/"right", "pieces": [[text, bold]]},
+    for the print page. Documents issued before step 8c have one line, on the left."""
+    lines = [{"align": "left", "pieces": []}]
+    for text, bold in pairs:
+        if text == BREAK:
+            lines.append({"align": "left", "pieces": []})
+        elif text == CENTER and not lines[-1]["pieces"]:
+            lines[-1]["align"] = "center"
+        elif text == RIGHT and not lines[-1]["pieces"]:
+            lines[-1]["align"] = "right"
+        elif text not in (CENTER, RIGHT):
+            lines[-1]["pieces"].append([text, bold])
+    return lines
 
 
 def render_paragraphs(body: str, values: dict, auto_bold: bool = True) -> list:
@@ -167,6 +201,7 @@ def render_paragraphs(body: str, values: dict, auto_bold: bool = True) -> list:
 def has_control_number(body: str) -> bool:
     return CONTROL_FIELD in fields_used(body or "")
 
+# ---------------------------------------------------------------- field values
 def ordinal(n: int) -> str:
     suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
     return f"{n}{suffix}"
@@ -184,7 +219,7 @@ def format_pesos(centavos: int) -> str:
 
 def field_values(*, client_name="", address="", purpose="", issue_date: date, barangay_name="", municipality="",
                  province="", age="", civil_status="", nationality="", years="", fee_centavos=0, or_number="",
-                 validity_months=None, control_number="") -> dict:
+                 validity_months=None, control_number="", ctc_number="", ctc_place="", ctc_date="") -> dict:
     """Every field -> the text it prints. Used with sample data here and with real data when issuing."""
     values = {
         "Client name": client_name, "Address": address, "Purpose": purpose,
@@ -194,6 +229,7 @@ def field_values(*, client_name="", address="", purpose="", issue_date: date, ba
         "Barangay name": barangay_name, "Municipality": municipality, "Province": province,
         "Age": age, "Civil status": civil_status, "Nationality": nationality, "Years of residence": years,
         "Control number": control_number,
+        "CTC number": ctc_number, "CTC issued at": ctc_place, "CTC issued on": ctc_date,
         "Fee": format_pesos(fee_centavos) if fee_centavos > 0 else "No fee",
         "OR number": or_number,
     }
@@ -210,7 +246,8 @@ def sample_values(branding: dict, fee_centavos: int, validity_months, today: dat
         issue_date=today, barangay_name=branding["name"], municipality=branding["municipality"],
         province=branding["province"], age="35", civil_status="Single", nationality="Filipino", years="10",
         fee_centavos=fee_centavos, or_number="1234567", validity_months=validity_months,
-        control_number=control_number)
+        control_number=control_number, ctc_number="12345678", ctc_place=branding["municipality"] or "Sample City",
+        ctc_date=f"{today.month:02d}/{today.day:02d}/{today.year}")
 
 
 # ---------------------------------------------------------------- reading what was typed in the editor

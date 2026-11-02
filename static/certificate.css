@@ -1,0 +1,212 @@
+/* The printed certificate (one sheet of paper).
+   The print page shows it at its real size. The two live previews (Templates editor and issue
+   form) show the very same sheet, shrunk to fit (see doc_preview.js), so the preview is exactly
+   what will print: same fonts, same spacing, same pictures.
+   The sizes come from the design (see cert_open in _macros.html); without a design they are the
+   values below, which is how every document printed before step 8b. */
+
+.cert {
+    --cert-navy: #1b2a4a;
+    --cert-muted: #6b7690;
+    --cert-w: 216mm;                /* the paper of the design: 8.5 in wide */
+    --cert-h: 279mm;                /* 11 in tall */
+    --cert-top: 15mm;               /* space above the text */
+    --cert-bottom: 15mm;            /* space below the text */
+    --cert-left: 18mm;
+    --cert-right: 18mm;
+    --cert-pt: 10.5pt;              /* the size of the wording (14px, the size used so far) */
+    --cert-line: 1.85;              /* line spacing; documents issued before step 8c keep 1.85 */
+    --cert-gap: 1.15em;             /* the space after each paragraph */
+    position: relative;
+    box-sizing: border-box;
+    width: var(--cert-w);
+    min-height: var(--cert-h);
+    padding: var(--cert-top) var(--cert-right) var(--cert-bottom) var(--cert-left);
+    background: #fff;
+    color: var(--cert-navy);
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+    font-size: var(--cert-pt);
+    text-align: left;
+    overflow: hidden;               /* a picture never sticks out of the paper */
+}
+
+.cert *,
+.cert *::before,
+.cert *::after {
+    box-sizing: border-box;
+}
+
+/* The text sits above the pictures that are behind it, and below the ones in front of it */
+.cert-content {
+    position: relative;
+    z-index: 1;
+}
+
+/* The header from Settings keeps its own size, whatever the text size is */
+.cert .doc-head-box {
+    font-size: 14px;
+}
+
+/* ---- the design: pictures placed where the Word file put them */
+.cert-pictures {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.cert-picture {
+    position: absolute;
+    overflow: hidden;               /* shows only the kept part of a cropped picture */
+}
+
+.cert-picture img {
+    position: absolute;
+    display: block;
+    max-width: none;
+}
+
+/* Pictures in front of the text: a second layer above it (only see-through parts let the text show) */
+.cert-pictures.is-front {
+    z-index: 2;
+}
+
+/* ---- the text of the certificate (sizes follow the text size) */
+.cert .control-no {
+    text-align: right;
+    margin: 14px 0 0;
+    font-size: .93em;
+    color: var(--cert-muted);
+}
+
+.cert .control-no strong {
+    color: var(--cert-navy);
+    letter-spacing: .03em;
+}
+
+.cert .title {
+    text-align: center;
+    margin: 1.57em 0 1.05em;
+    font-size: 1.5em;
+    letter-spacing: .05em;
+}
+
+.cert .body p {
+    margin: 0 0 var(--cert-gap);
+    line-height: var(--cert-line);
+    text-align: justify;
+    text-indent: 0.5in;             /* only documents issued before step 8c, with the automatic indent */
+}
+
+/* Each line of a paragraph (one Enter = a new line): left (justified), centred or on the right */
+.cert .body .ln {
+    display: block;
+}
+
+.cert .body .ln-center {
+    text-align: center;
+}
+
+.cert .body .ln-right {
+    text-align: right;
+}
+
+/* Templates with "Indent the first line automatically" turned off */
+.cert .body.no-indent p {
+    text-indent: 0;
+}
+
+/* A Tab typed in the wording: a fixed gap, the same width as the automatic indent */
+.cert .body .tab {
+    display: inline-block;
+    width: 0.5in;
+}
+
+.cert .fee-line {
+    margin: 26px 0 0;
+    font-size: .93em;
+    color: var(--cert-navy);
+}
+
+.cert .signatures {
+    display: flex;
+    justify-content: space-between;
+    gap: 40px;
+    margin-top: 64px;
+    break-inside: avoid;
+}
+
+/* One signer prints on the right */
+.cert .signatures.single {
+    justify-content: flex-end;
+}
+
+.cert .sign {
+    min-width: 220px;
+    flex: 0 1 280px;
+}
+
+.cert .sign .name {
+    display: block;
+    border-bottom: 1px solid var(--cert-navy);
+    font-weight: 700;
+    padding-bottom: 2px;
+    min-height: 22px;
+    margin-top: 38px;
+    text-align: center;
+}
+
+.cert .sign .title {
+    color: var(--cert-muted);
+    font-size: .86em;
+    margin-top: 4px;
+    text-align: center;
+}
+
+.cert .void-mark {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+}
+
+.cert .void-mark span {
+    font-size: 150px;
+    font-weight: 800;
+    letter-spacing: .1em;
+    color: rgba(185, 28, 28, .22);
+    transform: rotate(-28deg);
+    border: 14px solid rgba(185, 28, 28, .22);
+    padding: 0 30px;
+    border-radius: 20px;
+}
+
+/* ---- the shrunk copy in the previews */
+.cert-frame {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #dfe3ec;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.cert-frame > .cert {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: top left;     /* doc_preview.js sets the scale and the frame's height */
+}
+
+@media print {
+    .cert {
+        width: auto;                /* the paper chosen in the print window */
+        min-height: 100vh;          /* one full page, so a footer picture sits at the bottom of the paper */
+    }
+
+    .cert * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}

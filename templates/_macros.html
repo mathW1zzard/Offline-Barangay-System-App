@@ -174,31 +174,91 @@ page script can fill it in. -#}
     endif %}>{%- endif -%}
 {%- endmacro %}
 
-{#- The header of every printed page. b = the branding dict (name, header lines, logos). -#}
+{#- The header of every printed page (step 8c layout). b = the branding dict, or a document's saved
+   copy of it: line 1 (Republic of the Philippines), the place ("Municipality, Province"), the barangay
+   name, the logos, and the office line with its colour, printed below the logos above the rule. -#}
 {% macro doc_header(b, ids=False) -%}
+    <div class="doc-head-box" style="--office-color: {{ b.office_color or '#C62828' }}">
+        <header class="doc-head">
+            <div class="doc-logos">{{ _logo(b.logos.left, 'pv-left', ids) }}</div>
+            <div class="doc-title">
+                <p class="doc-line1" {% if ids %} id="pv-line1" {% endif %}>{{ b.header_line_1 }}</p>
+                <p class="doc-place" {% if ids %} id="pv-place" {% endif %}>{{ (b.place or '')|upper }}</p>
+                <h1 class="doc-name" {% if ids %} id="pv-name" {% endif %}>{{ b.name|upper }}</h1>
+            </div>
+            <div class="doc-logos doc-logos-right">{{ _logo(b.logos.right, 'pv-right', ids) }}{{ _logo(b.logos.third,
+                'pv-third', ids) }}</div>
+        </header>
+        <p class="doc-office" {% if ids %} id="pv-office" {% endif %}>{{ (b.header_line_2 or '')|upper }}</p>
+    </div>
+    {%- endmacro %}
 
-<div class="doc-head-box">
-    <header class="doc-head">
-        <div class="doc-logos">{{ _logo(b.logos.left, 'pv-left', ids) }}</div>
-        <div class="doc-title">
-            <p class="doc-line1" {% if ids %} id="pv-line1" {% endif %}>{{ b.header_line_1|upper }}</p>
-            <h1 class="doc-name" {% if ids %} id="pv-name" {% endif %}>{{ b.full_name|upper }}</h1>
-            <p class="doc-line2" {% if ids %} id="pv-line2" {% endif %}>{{ b.header_line_2 }}</p>
+    {#- The colour of the office line (Settings and the first-run wizard): ready colours, or her own. The
+   choice is kept in a hidden box (with data-saved on Settings, so Discard puts it back); the buttons
+   and the colour picker set it. See branding_form.js. -#}
+    {% macro color_choice(colors, shown_color, saved_color=none) -%}
+    <div class="field color-choice" data-color-choice>
+        <p class="label" id="office-color-label">Colour of the office line</p>
+        <input type="hidden" name="office_color" value="{{ shown_color or '#C62828' }}" {% if saved_color is not none %}
+            data-saved="{{ saved_color }}" {% endif %}>
+        <div class="color-options" role="radiogroup" aria-labelledby="office-color-label">
+            {% for value, label in colors.items() %}
+            <button type="button" class="color-option" role="radio" aria-checked="false" data-color="{{ value }}"><span
+                    class="color-dot" style="background: {{ value }}"></span>{{ label }}</button>
+            {% endfor %}
+            <label class="color-option color-own">Own colour <input type="color" data-color-own value="#000000"></label>
         </div>
-        <div class="doc-logos doc-logos-right">{{ _logo(b.logos.right, 'pv-right', ids) }}{{ _logo(b.logos.third,
-            'pv-third', ids) }}</div>
-    </header>
+    </div>
+    {%- endmacro %}
+
+    {#- The three tabs of the Documents section. -#}
+    {% macro documents_tabs(active) -%}
+    <nav class="doc-tabs" aria-label="Documents">
+        <a class="doc-tab{{ ' active' if active == 'issue' }}" href="/documents" {% if active=='issue' %}
+            aria-current="page" {% endif %}>Issue a document</a>
+        <a class="doc-tab{{ ' active' if active == 'history' }}" href="/documents/history" {% if active=='history' %}
+            aria-current="page" {% endif %}>Issued documents</a>
+        <a class="doc-tab{{ ' active' if active == 'templates' }}" href="/documents/templates" {% if active=='templates'
+            %} aria-current="page" {% endif %}>Templates</a>
+    </nav>
+    {%- endmacro %}
+
+
+{#- ---- The certificate sheet (step 8b): used by the print page and by both live previews.
+   d is a design made ready by documents.for_print: the paper size, the side margins, the space above
+   and below the text, and the pictures, each placed in mm. pt is the text size in half points. -#}
+
+{#- The opening tag of a sheet. The page closes it with </div>. lk is the spacing of the wording
+   (documents.look / snapshot_look): text size in half points, line height, paragraph gap in em.
+   |float and |int keep the style to plain numbers. -#}
+{% macro cert_open(d, lk, id='') -%}
+<div class="cert"{% if id %} id="{{ id }}"{% endif %}
+    style="--cert-w: {{ d.page_w|float }}mm; --cert-h: {{ d.page_h|float }}mm; --cert-top: {{ d.top_mm|int }}mm; --cert-bottom: {{ d.bottom_mm|int }}mm; --cert-left: {{ d.left_mm|float }}mm; --cert-right: {{ d.right_mm|float }}mm; --cert-pt: {{ lk.pt|int / 2 }}pt; --cert-line: {{ lk.line|float }}; --cert-gap: {{ lk.gap|float }}em">
+{%- endmacro %}
+
+{#- The wording of a document: paragraphs, each made of lines (left, centred or on the right). Each
+   paragraph is a list of lines from doc_templates.paragraph_lines. -#}
+{% macro cert_body(paragraphs, lk, tab) -%}
+<div class="body{% if not lk.indent %} no-indent{% endif %}">
+    {% for lines in paragraphs %}<p>{% for line in lines %}<span class="ln ln-{{ line.align }}">{% for text, bold in line.pieces %}{%
+        if text == tab %}<span class="tab"></span>{% elif bold %}<strong>{{ text }}</strong>{% else %}{{ text }}{% endif %}{%
+        endfor %}</span>{% endfor %}</p>
+    {% endfor %}
 </div>
 {%- endmacro %}
 
-{#- The three tabs of the Documents section. -#}
-{% macro documents_tabs(active) -%}
-<nav class="doc-tabs" aria-label="Documents">
-    <a class="doc-tab{{ ' active' if active == 'issue' }}" href="/documents" {% if active=='issue' %}
-        aria-current="page" {% endif %}>Issue a document</a>
-    <a class="doc-tab{{ ' active' if active == 'history' }}" href="/documents/history" {% if active=='history' %}
-        aria-current="page" {% endif %}>Issued documents</a>
-    <a class="doc-tab{{ ' active' if active == 'templates' }}" href="/documents/templates" {% if active=='templates' %}
-        aria-current="page" {% endif %}>Templates</a>
-</nav>
+{#- The pictures of the design, each where Word put it: measured from the top of the paper for a header
+   picture and from the bottom for a footer picture. A cropped picture shows only its kept part.
+   Two layers: the pictures behind the text, and the pictures in front of it. -#}
+{% macro cert_layers(d, ids=False) -%}
+{%- for front in (False, True) %}
+<div class="cert-pictures{{ ' is-front' if front }}"{% if ids %} id="cert-pictures-{{ 'front' if front else 'behind' }}"{% endif %}>
+{%- for item in d['items'] if item.front == front %}
+{%- set c = item.crop -%}
+{%- set kept_w = 1 - c[0]|float - c[2]|float -%}
+{%- set kept_h = 1 - c[1]|float - c[3]|float %}
+<div class="cert-picture" style="left: {{ item.x|float }}mm; {{ 'top' if item.anchor == 'top' else 'bottom' }}: {{ item.y|float }}mm; width: {{ item.w|float }}mm; height: {{ item.h|float }}mm"><img alt="" src="/pictures/{{ item.picture|int }}" style="width: {{ (100 / kept_w)|round(4) }}%; height: {{ (100 / kept_h)|round(4) }}%; left: {{ (-100 * c[0]|float / kept_w)|round(4) }}%; top: {{ (-100 * c[1]|float / kept_h)|round(4) }}%"></div>
+{%- endfor %}
+</div>
+{%- endfor %}
 {%- endmacro %}

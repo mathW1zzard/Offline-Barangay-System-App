@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, doc_header, documents_tabs %}
+{% from "_macros.html" import icon, doc_header, documents_tabs, cert_open, cert_layers %}
 {% block title %}Edit template{% endblock %}
 {% block page_title %}Documents{% endblock %}
 {% block page_subtitle %}Edit template{% endblock %}
 {% block description %}Edit the wording of a document{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="/static/document_header.css">
+<link rel="stylesheet" href="/static/certificate.css">
 {% endblock %}
 {% block content %}
 {% if message %}
-<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}"
-    role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
+<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}" role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
 {% endif %}
 
 {{ documents_tabs('templates') }}
@@ -18,15 +18,13 @@
 <div class="editor-layout">
     <section class="card">
         <h2 class="card-title">{{ icon('pencil', 22) }} {{ shown.name }}
-            <span class="tag tag-regular">{{ 'Built-in' if t.builtin else 'Custom' }}</span>
-        </h2>
+            <span class="tag tag-regular">{{ 'Built-in' if t.builtin else 'Custom' }}</span></h2>
         {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
 
         <form action="/documents/templates/{{ t.id }}/edit" method="post" class="form" id="form-template">
             <div class="field">
                 <label for="name">Name of the document</label>
-                <input type="text" name="name" id="name" value="{{ shown.name }}" maxlength="60" autocomplete="off"
-                    required>
+                <input type="text" name="name" id="name" value="{{ shown.name }}" maxlength="60" autocomplete="off" required>
             </div>
 
             <div class="field">
@@ -37,78 +35,84 @@
                     <button type="button" class="chip-btn" data-insert="{{ f }}">{{ f }}</button>
                     {% endfor %}
                     {% for key, (label, fields) in extra_menu.items() %}{% for f in fields %}
-                    <button type="button" class="chip-btn chip-extra" data-insert="{{ f }}" data-needs="{{ key }}" {% if
-                        f not in available %} hidden{% endif %}>{{ f }}</button>
+                    <button type="button" class="chip-btn chip-extra" data-insert="{{ f }}" data-needs="{{ key }}"{% if f not in available %} hidden{% endif %}>{{ f }}</button>
                     {% endfor %}{% endfor %}
-                    <button type="button" class="chip-btn chip-extra" data-insert="{{ validity_field }}"
-                        data-needs="validity" {% if validity_field not in available %} hidden{% endif %}>{{
-                        validity_field }}</button>
+                    <button type="button" class="chip-btn chip-extra" data-insert="{{ validity_field }}" data-needs="validity"{% if validity_field not in available %} hidden{% endif %}>{{ validity_field }}</button>
                 </div>
                 <div class="wording-tools" role="toolbar" aria-label="Format the wording" aria-controls="body">
-                    <button type="button" class="btn btn-sm btn-outline" id="btn-bold"
-                        title="Bold (Ctrl+B)"><strong>B</strong> Bold</button>
-                    <button type="button" class="btn btn-sm btn-outline" id="btn-indent" title="Indent (Tab)">&rarr;
-                        Indent</button>
-                    <span class="hint">Select words and press Bold (or Ctrl+B). Press Tab to indent, Shift+Tab to remove
-                        it.
-                        To leave the box with the keyboard, press Esc, then Tab.</span>
+                    <button type="button" class="btn btn-sm btn-outline" id="btn-bold" title="Bold (Ctrl+B)"><strong>B</strong> Bold</button>
+                    <button type="button" class="btn btn-sm btn-outline" id="btn-indent" title="Indent (Tab)">&rarr; Indent</button>
+                    <button type="button" class="btn btn-sm btn-outline" id="btn-center" title="Center the line (Ctrl+E)">&harr; Center</button>
+                    <button type="button" class="btn btn-sm btn-outline" id="btn-right" title="Put the line on the right">&#8677; Right</button>
+                    <span class="hint">Select words and press Bold (or Ctrl+B). Put the cursor on a line and press Center (or
+                        Ctrl+E); press it again to undo. Tab indents, Shift+Tab removes it. To leave the box with the keyboard,
+                        press Esc, then Tab.</span>
                 </div>
                 <textarea name="body" id="body" rows="16" spellcheck="true">{{ shown.body }}</textarea>
-                <p class="hint">Press Enter twice to start a new paragraph. A field such as {Client name} is replaced
-                    when the document
-                    is printed. Words between two pairs of asterisks, like **THIS IS TO CERTIFY**, print in bold.
-                    Use the buttons above so the field names are spelled correctly.</p>
-                <p class="hint hint-warn" id="no-number-note" {% if '{control number}' in shown.body|lower %} hidden{%
-                    endif %}>
+                <p class="hint">Press Enter for a new line, and Enter twice for a new paragraph (with a space before it).
+                    A field such as {Client name} is replaced when the document is printed. Words between two pairs of
+                    asterisks, like **THIS IS TO CERTIFY**, print in bold. A line starting with &gt;&gt; is centred, and with
+                    &gt;&gt;&gt; it goes on the right. Use the buttons above so the field names are spelled correctly.</p>
+                <p class="hint hint-warn" id="no-number-note"{% if '{control number}' in shown.body|lower %} hidden{% endif %}>
                     This wording has no {Control number}, so no control number will print on paper. Without a printed
                     number, a paper copy cannot be matched to your records. Use the Control number button to add it
                     wherever you want it.</p>
-                <p class="field-error" id="tpl-error" role="alert" {% if not error %} hidden{% endif %}></p>
+                <p class="field-error" id="tpl-error" role="alert"{% if not error %} hidden{% endif %}></p>
             </div>
 
             <div class="form-row">
                 <div class="field">
                     <label for="code_prefix">Number prefix</label>
-                    <input type="text" name="code_prefix" id="code_prefix" value="{{ shown.code_prefix }}" maxlength="6"
-                        autocomplete="off" required>
-                    <p class="hint">Starts the control number, for example BC. Templates with the same prefix share one
-                        number sequence.</p>
+                    <input type="text" name="code_prefix" id="code_prefix" value="{{ shown.code_prefix }}" maxlength="6" autocomplete="off" required>
+                    <p class="hint">Starts the control number, for example BC. Templates with the same prefix share one number sequence.</p>
                 </div>
                 <div class="field">
                     <label for="default_fee">Default fee (pesos)</label>
-                    <input type="text" name="default_fee" id="default_fee" value="{{ shown.default_fee }}"
-                        inputmode="decimal" autocomplete="off">
-                    <p class="hint">Can be changed for each document. 0 means no fee. This only records the fee; it is
-                        not a payment.</p>
+                    <input type="text" name="default_fee" id="default_fee" value="{{ shown.default_fee }}" inputmode="decimal" autocomplete="off">
+                    <p class="hint">Can be changed for each document. 0 means no fee. This only records the fee; it is not a payment.</p>
                 </div>
             </div>
 
             <fieldset class="field">
                 <legend>Options</legend>
                 <label class="check-row check-compact">
-                    <input type="checkbox" name="print_fee" value="1" {% if shown.print_fee %} checked{% endif %}>
+                    <input type="checkbox" name="print_fee" value="1"{% if shown.print_fee %} checked{% endif %}>
                     <span>Print the fee and receipt number at the bottom of the document</span>
                 </label>
+                <div class="validity-row">
+                    <label for="font_half_pt">Text size</label>
+                    <select name="font_half_pt" id="font_half_pt" style="width: 110px">
+                        {% for value, label in font_sizes.items() %}
+                        <option value="{{ value }}"{% if shown.font_half_pt == value %} selected{% endif %}>{{ label }} pt</option>
+                        {% endfor %}
+                    </select>
+                    <span class="hint">10.5 pt is the usual size.</span>
+                </div>
+                <div class="validity-row">
+                    <label for="line_spacing">Line spacing</label>
+                    <select name="line_spacing" id="line_spacing" style="width: 110px">
+                        {% for value, label in line_spacings.items() %}
+                        <option value="{{ value }}"{% if shown.line_spacing == value %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <label for="para_gap">Space after each paragraph</label>
+                    <select name="para_gap" id="para_gap" style="width: 130px">
+                        {% for key, (label, size) in para_gaps.items() %}
+                        <option value="{{ key }}"{% if shown.para_gap == key %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <label class="check-row check-compact">
-                    <input type="checkbox" name="auto_bold" value="1" id="auto_bold" {% if shown.auto_bold %} checked{%
-                        endif %}>
+                    <input type="checkbox" name="auto_bold" value="1" id="auto_bold"{% if shown.auto_bold %} checked{% endif %}>
                     <span>Make filled-in details bold automatically (name, address, date...)</span>
                 </label>
                 <label class="check-row check-compact">
-                    <input type="checkbox" name="auto_indent" value="1" id="auto_indent" {% if shown.auto_indent %}
-                        checked{% endif %}>
-                    <span>Indent the first line of every paragraph automatically</span>
-                </label>
-                <label class="check-row check-compact">
-                    <input type="checkbox" name="use_validity" value="1" data-grants="validity" {% if shown.use_validity
-                        %} checked{% endif %}>
+                    <input type="checkbox" name="use_validity" value="1" data-grants="validity"{% if shown.use_validity %} checked{% endif %}>
                     <span>This document expires</span>
                 </label>
-
                 <div class="validity-row">
                     <label for="validity_months">Valid for (months)</label>
-                    <input type="text" name="validity_months" id="validity_months" value="{{ shown.validity_months }}"
-                        inputmode="numeric" maxlength="2" autocomplete="off">
+                    <input type="text" name="validity_months" id="validity_months" value="{{ shown.validity_months }}" inputmode="numeric" maxlength="2" autocomplete="off">
                 </div>
             </fieldset>
 
@@ -116,22 +120,81 @@
                 <label for="signers">Who signs this document</label>
                 <select name="signers" id="signers">
                     {% for key, label in signer_options.items() %}
-                    <option value="{{ key }}" {% if shown.signers==key %} selected{% endif %}>{{ label }}</option>
+                    <option value="{{ key }}"{% if shown.signers == key %} selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
                 <p class="hint">This is the usual choice. It can still be changed for one document when issuing it.</p>
             </div>
+
             <fieldset class="field">
                 <legend>Extra fields</legend>
-                <p class="hint">Tick what this document needs. Ticked items are asked for when issuing it, and can be
-                    used in the wording.</p>
+                <p class="hint">Tick what this document needs. Ticked items are asked for when issuing it, and can be used in the wording.</p>
                 {% for key, (label, fields) in extra_menu.items() %}
                 <label class="check-row check-compact">
-                    <input type="checkbox" name="extras" value="{{ key }}" data-grants="{{ key }}" {% if key in
-                        shown.extras %} checked{% endif %}>
+                    <input type="checkbox" name="extras" value="{{ key }}" data-grants="{{ key }}"{% if key in shown.extras %} checked{% endif %}>
                     <span>{{ label }}</span>
                 </label>
                 {% endfor %}
+            </fieldset>
+
+            <fieldset class="field design-box" id="design-box">
+                <legend>Design of the page</legend>
+                <p class="hint">Load the blank design of this certificate, the way it was made in Word or WPS. The app
+                    prints its pictures (banners, logos, seal) where the Word file puts them, and your wording on top.
+                    Nothing changes for this document until you press Save template.</p>
+                <input type="hidden" name="design" id="design" value='{{ shown.design|tojson if shown.design else "" }}'>
+                <input type="file" id="pick-docx" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+                <input type="file" id="pick-page" accept="image/png,image/jpeg,image/webp" hidden>
+                <p class="design-summary" id="design-summary"></p>
+                <div class="row-actions">
+                    <button type="button" class="btn btn-sm btn-outline" id="load-docx">Load a Word file (.docx)</button>
+                    <button type="button" class="btn btn-sm btn-outline" id="load-page">Picture of the whole page</button>
+                    <button type="button" class="btn btn-sm btn-danger-outline" id="remove-design">Remove design</button>
+                </div>
+                <div class="design-notes" id="design-notes" role="status"></div>
+                <p class="hint">Use "Picture of the whole page" when the Word design is made of text boxes or shapes:
+                    save the blank page as a picture (in WPS: Export to Image) and load that picture.</p>
+                {% if designs %}
+                <div class="design-copy">
+                    <label for="copy-from">Or copy the design from</label>
+                    <select id="copy-from">
+                        <option value="">Choose a document...</option>
+                        {% for other_id, other in designs.items() %}<option value="{{ other_id }}">{{ other.name }}</option>{% endfor %}
+                    </select>
+                    <button type="button" class="btn btn-sm btn-outline" id="copy-design">Copy</button>
+                </div>
+                {% endif %}
+                <div class="design-options" id="design-options">
+                    <div class="form-row">
+                        <div class="field">
+                            <label for="design_layer">Pictures of the design</label>
+                            <select id="design_layer">
+                                {% for key, label in layers.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="design_header">Logos and barangay name from Settings</label>
+                            <select id="design_header">
+                                <option value="show">Show them above the title</option>
+                                <option value="hide">Hide them (the design already has them)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="field">
+                            <label for="design_top_mm">Space above the text: <output id="top-mm-out"></output> mm</label>
+                            <input type="range" id="design_top_mm" min="{{ design_mm[0] }}" max="{{ design_mm[1] }}" step="1">
+                        </div>
+                        <div class="field">
+                            <label for="design_bottom_mm">Space below the text: <output id="bottom-mm-out"></output> mm</label>
+                            <input type="range" id="design_bottom_mm" min="{{ design_mm[0] }}" max="{{ design_mm[1] }}" step="1">
+                        </div>
+                    </div>
+                    <p class="hint">In front of the text, a picture covers the wording and the logos wherever they meet;
+                        only the see-through parts of a PNG picture let them show. Print on the paper size of the design.
+                        Office printers cannot print the last few millimetres at the edge of the paper, so a picture that
+                        touches the edge prints slightly trimmed.</p>
+                </div>
             </fieldset>
 
             <div class="form-actions">
@@ -142,13 +205,12 @@
 
         {% if t.builtin and t.customized %}
         <div class="restore-row">
-            <p class="hint">You changed the wording of this built-in document. You can go back to the original wording.
-                Your other settings stay as they are.</p>
+            <p class="hint">You changed the wording of this built-in document. You can go back to the original wording. Your other settings stay as they are.</p>
             <button type="button" class="btn btn-danger-outline" data-confirm
-                data-action="/documents/templates/{{ t.id }}/restore" data-title="Restore the original wording?"
+                data-action="/documents/templates/{{ t.id }}/restore"
+                data-title="Restore the original wording?"
                 data-message="The wording of {{ shown.name }} will go back to the original text. Your changes to the wording will be lost. The name, fee, prefix and options stay as they are."
-                data-label="Restore original wording" data-variant="danger">{{ icon('recall', 18) }} Restore original
-                wording</button>
+                data-label="Restore original wording" data-variant="danger">{{ icon('recall', 18) }} Restore original wording</button>
         </div>
         {% endif %}
     </section>
@@ -156,17 +218,25 @@
     <aside class="editor-preview" aria-label="Preview">
         <section class="card">
             <h2 class="card-title">Preview</h2>
-            <p class="hint">Made-up client details and an example control number are used here. The header and the
-                names of the signers come from Settings.</p>
-            <div class="paper-preview">
-                {{ doc_header(branding) }}
-                <h2 class="tpl-title" id="tpl-title">{{ shown.name|upper }}</h2>
-                <div class="tpl-body{% if not shown.auto_indent %} no-indent{% endif %}" id="tpl-body"></div>
-                <div class="tpl-signs" id="tpl-signs">
-                    <div data-signer="secretary"><span class="tpl-sign-name">{{ branding.secretary_name|upper
-                            }}</span><small>{{ branding.secretary_title }}</small></div>
-                    <div data-signer="captain"><span class="tpl-sign-name">{{ branding.captain_name|upper
-                            }}</span><small>{{ branding.captain_title }}</small></div>
+            <p class="hint">The whole page with its design, filled with made-up client details and an example control
+                number. The header and the names of the signers come from Settings.</p>
+            <p class="hint hint-warn" data-overflow-note hidden>The text runs past the bottom of the paper, so it would
+                print on two pages. Make the text size or the space above or below the text smaller, or shorten the
+                wording.</p>
+            <div class="cert-frame">
+                {{ cert_open(print_design, look, id='cert') }}
+                    {{ cert_layers(print_design, ids=True) }}
+                    <div class="cert-content">
+                        <div data-cert-header{% if print_design.header == 'hide' %} hidden{% endif %}>{{ doc_header(branding) }}</div>
+                        <h1 class="title" id="tpl-title">{{ shown.name|upper }}</h1>
+                        <div class="body no-indent" id="tpl-body"></div>
+                        <div class="signatures" id="tpl-signs">
+                            <div class="sign" data-signer="secretary"><span class="name">{{ branding.secretary_name|upper }}</span>
+                                <div class="title">{{ branding.secretary_title }}</div></div>
+                            <div class="sign" data-signer="captain"><span class="name">{{ branding.captain_name|upper }}</span>
+                                <div class="title">{{ branding.captain_title }}</div></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -191,7 +261,8 @@
     const numberNote = $('#no-number-note');
     const signsBox = $('#tpl-signs');
     const signersBox = $('#signers');
-    const indentBox = $('#auto_indent');
+    const sheet = $('#cert');
+    const fontBox = $('#font_half_pt');
 
     // Show only the field buttons that this template may use, and only allow months when it expires
     function syncAvailable() {
@@ -256,11 +327,36 @@
         }
     }
 
+    // Center / Right: a mark at the start of every line the cursor or the selection touches.
+    // Pressing the same one again takes the mark away; the other one replaces it.
+    function align(mark) {
+        const start = bodyBox.selectionStart, end = bodyBox.selectionEnd, all = bodyBox.value;
+        const first = all.lastIndexOf('\n', start - 1) + 1;
+        let last = all.indexOf('\n', Math.max(end - (end > start ? 1 : 0), start));
+        if (last === -1) last = all.length;
+        const block = all.slice(first, last);
+        const lines = block.split('\n');
+        const markOf = (line) => (line.startsWith('>>>') ? '>>>' : line.startsWith('>>') ? '>>' : '');
+        const strip = (line) => line.slice(markOf(line).length).replace(/^ /, '');
+        const filled = lines.filter((line) => line.trim());
+        const allHave = filled.length > 0 && filled.every((line) => markOf(line) === mark);
+        const changed = lines.map((line) => (!line.trim() ? line : allHave ? strip(line) : mark + ' ' + strip(line))).join('\n');
+        if (changed === block) return;
+        bodyBox.focus();
+        bodyBox.setSelectionRange(first, last);
+        typeText(changed, 0, changed.length);
+    }
+    $('#btn-center').addEventListener('click', () => align('>>'));
+    $('#btn-right').addEventListener('click', () => align('>>>'));
+
     let tabLeaves = false;                                   // Esc, then Tab: leave the box as usual
     bodyBox.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'b') {
             e.preventDefault();
             toggleBold();
+        } else if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'e') {
+            e.preventDefault();
+            align('>>');
         } else if (e.key === 'Escape') {
             tabLeaves = true;
         } else if (e.key === 'Tab' && !tabLeaves && !e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -276,9 +372,92 @@
 
     // The preview is made by the server, so it is exactly what will print
     const draw = (paragraphs) => window.drawDocParagraphs(previewBody, paragraphs);
+    // ---- the design of the page: kept as JSON in the hidden "design" field, sent with Save template
+    const designField = $('#design');
+    const notesBox = $('#design-notes');
+    let design = designField.value ? JSON.parse(designField.value) : null;
+    const layerBox = $('#design_layer'), headerBox = $('#design_header');
+    const topBox = $('#design_top_mm'), bottomBox = $('#design_bottom_mm');
+
+    function showDesign() {                              // the controls follow the design
+        $('#design-options').hidden = !design;
+        $('#remove-design').hidden = !design;
+        if (design) {
+            layerBox.value = design.layer;
+            headerBox.value = design.header;
+            topBox.value = design.top_mm;
+            bottomBox.value = design.bottom_mm;
+            const inches = (mm) => (mm / 25.4).toFixed(1).replace(/\.0$/, '');
+            const what = design.source === 'docx' ? 'Word file' : 'Picture of the whole page';
+            $('#design-summary').textContent = what + (design.file_name ? ': ' + design.file_name : '') + ', ' +
+                design.items.length + (design.items.length === 1 ? ' picture' : ' pictures') + ', paper ' +
+                inches(design.page_w) + ' x ' + inches(design.page_h) + ' in.';
+        } else {
+            $('#design-summary').textContent = 'No design: a plain page with the logos and barangay name from Settings.';
+        }
+        designField.value = design ? JSON.stringify(design) : '';
+    }
+    function showNotes(lines, isError) {
+        notesBox.className = 'design-notes' + (isError ? ' is-error' : '');
+        notesBox.replaceChildren(...lines.map((line) => {
+            const p = document.createElement('p');
+            p.textContent = line;
+            return p;
+        }));
+    }
+    const designChanged = () => { showDesign(); form.dispatchEvent(new Event('change', { bubbles: true })); };
+
+    async function loadDesign(file, kind) {
+        const data = new FormData();
+        data.append('design_file', file);
+        data.append('kind', kind);
+        showNotes(['Reading ' + file.name + '...']);
+        try {
+            const reply = await fetch('/documents/designs/import', { method: 'POST', body: data });
+            const info = await reply.json();
+            if (!reply.ok) throw new Error(info.error || 'The design could not be loaded.');
+            design = info.design;
+            showNotes(info.notes || []);
+            designChanged();
+        } catch (e) {
+            showNotes([e.message || 'The design could not be loaded.'], true);
+        }
+    }
+    [['#load-docx', '#pick-docx', 'docx'], ['#load-page', '#pick-page', 'picture']].forEach(([button, picker, kind]) => {
+        $(button).addEventListener('click', () => $(picker).click());
+        $(picker).addEventListener('change', () => {
+            if ($(picker).files.length) loadDesign($(picker).files[0], kind);
+            $(picker).value = '';                             // choosing the same file again still works
+        });
+    });
+    $('#remove-design').addEventListener('click', () => { design = null; showNotes([]); designChanged(); });
+    layerBox.addEventListener('change', () => { design.layer = layerBox.value; designChanged(); });
+    headerBox.addEventListener('change', () => { design.header = headerBox.value; designChanged(); });
+    [[topBox, 'top_mm'], [bottomBox, 'bottom_mm']].forEach(([box, key]) => box.addEventListener('input', () => {
+        design[key] = Number(box.value);
+        showDesign();
+    }));
+
+    const designs = {{ designs|tojson }};          // other documents' designs, for "Copy the design from"
+    const copyButton = $('#copy-design');
+    if (copyButton) copyButton.addEventListener('click', () => {
+        const chosen = designs[$('#copy-from').value];
+        if (!chosen) return;
+        design = JSON.parse(JSON.stringify(chosen.design));
+        showNotes(['Copied from ' + chosen.name + '. Press Save template to keep it.']);
+        designChanged();
+    });
+
+    const PARA_GAPS = {{ para_gaps|tojson }};
     function syncLayout() {
-        previewBody.classList.toggle('no-indent', !indentBox.checked);
         window.showDocSigners(signsBox, signersBox.value);
+        window.applyCertDesign(sheet, design, fontBox.value);
+        sheet.style.setProperty('--cert-line', Number($('#line_spacing').value) / 100);
+        sheet.style.setProperty('--cert-gap', PARA_GAPS[$('#para_gap').value][1] + 'em');
+        if (design) {
+            $('#top-mm-out').textContent = design.top_mm;
+            $('#bottom-mm-out').textContent = design.bottom_mm;
+        }
     }
 
     let timer = null;
@@ -302,9 +481,14 @@
     }
     const schedule = () => { clearTimeout(timer); timer = setTimeout(refresh, 250); };
 
-    form.addEventListener('input', () => { previewTitle.textContent = nameBox.value.toUpperCase(); schedule(); });
+    form.addEventListener('input', (e) => {
+        previewTitle.textContent = nameBox.value.toUpperCase();
+        if (e.target.type === 'range') { syncLayout(); return; }   // moving a slider: no need to ask the server
+        schedule();
+    });
     form.addEventListener('change', () => { syncAvailable(); syncLayout(); schedule(); });
     syncAvailable();
+    showDesign();
     syncLayout();
     refresh();
 })();

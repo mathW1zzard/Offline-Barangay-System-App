@@ -1,4 +1,4 @@
-{% from "_macros.html" import icon, doc_header %}
+{% from "_macros.html" import icon, doc_header, color_choice %}
 <!DOCTYPE html>
 <html lang="en">
 
@@ -59,15 +59,16 @@
                             placeholder="e.g. Isabela" maxlength="60" autocomplete="off" required>
                     </div>
                     <div class="field">
-                        <label for="header_line_1">Line above the barangay name</label>
+                        <label for="header_line_1">First line (above the municipality)</label>
                         <input type="text" name="header_line_1" id="header_line_1" value="{{ shown.header_line_1 }}"
-                            maxlength="80" autocomplete="off">
+                            placeholder="e.g. Republic of the Philippines" maxlength="80" autocomplete="off">
                     </div>
                     <div class="field">
-                        <label for="header_line_2">Line under the barangay name (optional)</label>
+                        <label for="header_line_2">Office line, below the logos (optional)</label>
                         <input type="text" name="header_line_2" id="header_line_2" value="{{ shown.header_line_2 }}"
-                            placeholder="e.g. Office of the Barangay Captain" maxlength="80" autocomplete="off">
+                            placeholder="e.g. Office of the Punong Barangay" maxlength="80" autocomplete="off">
                     </div>
+                    {{ color_choice(office_colors, shown.office_color) }}
                     <div class="wizard-actions">
                         <button type="submit" class="btn btn-primary btn-lg">Next</button>
                     </div>

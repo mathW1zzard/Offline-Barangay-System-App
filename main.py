@@ -13,6 +13,8 @@ from paths import resource_path, data_path
 import branding
 import doc_templates
 import documents
+import pictures
+import docx_design
 from datetime import datetime, date, time, timedelta
 from starlette.middleware.sessions import SessionMiddleware
 from enum import Enum
@@ -1983,22 +1985,17 @@ def purge_old_records(request: Request, cutoff: str = Form(...)):
 # SETTINGS (barangay profile, logos, signatories, document defaults) and the FIRST-RUN WIZARD.
 # The wizard and the Settings page share the same helpers, so the same rules apply in both places.
 SETTING_LABELS = {
-    "barangay_name": "Barangay name", 
-    "municipality": "Municipality", 
-    "province": "Province",
-    "header_line_1": "Header line 1", 
-    "header_line_2": "Header line 2",
-    "signatory_captain_name": "Captain name", 
-    "signatory_captain_title": "Captain title",
-    "signatory_secretary_name": "Secretary name", 
-    "signatory_secretary_title": "Secretary title",
+    "barangay_name": "Barangay name", "municipality": "Municipality", "province": "Province",
+    "header_line_1": "Header line 1", "header_line_2": "Office line", "office_color": "Office line colour",
+    "signatory_captain_name": "Captain name", "signatory_captain_title": "Captain title",
+    "signatory_secretary_name": "Secretary name", "signatory_secretary_title": "Secretary title",
     "control_number_format": "Control number style",
 }
 
-def profile_values(barangay_name, municipality, province, header_line_1, header_line_2) -> dict:
+def profile_values(barangay_name, municipality, province, header_line_1, header_line_2, office_color) -> dict:
     return {"barangay_name": clean_text(barangay_name, 60), "municipality": clean_text(municipality, 60),
             "province": clean_text(province, 60), "header_line_1": clean_text(header_line_1, 80),
-            "header_line_2": clean_text(header_line_2, 80)}
+            "header_line_2": clean_text(header_line_2, 80), "office_color": branding.clean_color(office_color)}
 
 def signatory_values(captain_name, captain_title, secretary_name, secretary_title) -> dict:
     return {"signatory_captain_name": clean_text(captain_name, 80),
@@ -2046,6 +2043,7 @@ def settings_page(request: Request, form: dict | None = None, errors: dict | Non
         "saved": request.session.pop("settings_flash", None),   # one-time "Saved." message
         "logos": branding.logo_info(values),
         "control_formats": branding.CONTROL_FORMATS,
+        "office_colors": branding.OFFICE_COLORS,
     }, status_code=status_code)
 
 def settings_saved(request: Request, section: str, changed: bool):
@@ -2059,8 +2057,9 @@ def show_settings(request: Request):
 
 @app.post("/settings/profile", dependencies=[Depends(admin_required)])
 def save_settings_profile(request: Request, barangay_name: str = Form(""), municipality: str = Form(""),
-                          province: str = Form(""), header_line_1: str = Form(""), header_line_2: str = Form("")):
-    new = profile_values(barangay_name, municipality, province, header_line_1, header_line_2)
+                          province: str = Form(""), header_line_1: str = Form(""), header_line_2: str = Form(""),
+                          office_color: str = Form("")):
+    new = profile_values(barangay_name, municipality, province, header_line_1, header_line_2, office_color)
     error = branding.validate_profile(new)
     if error:
         return settings_page(request, form=new, errors={"profile": error}, status_code=400)
@@ -2100,13 +2099,26 @@ def save_settings_logos(request: Request,
 
 @app.get("/branding/{slot}.png")
 def branding_logo(slot: str):
-    """The saved logos. Open to everyone on purpose (so the sign-in screens can show them); the
-    server only listens on this computer. Serves only the three known slot names."""
-    path = branding.logo_path(slot) if slot in branding.LOGO_SLOTS else None
-    if path is None or not path.exists():
+    """The saved logos (kept inside the database since step 8b). Open to everyone on purpose (so the
+    sign-in screens can show them); the server only listens on this computer. Serves only the three
+    known slot names, never a picture chosen by number."""
+    picture_id = branding.logo_picture_id(slot) if slot in branding.LOGO_SLOTS else None
+    found = pictures.load(picture_id) if picture_id else None
+    if found is None:
         return Response(status_code=404)
-    return FileResponse(path, media_type="image/png",
-                        headers={"Cache-Control": "public, max-age=31536000, immutable"})   # the ?v= in the URL changes on every upload
+    data, mime = found
+    return Response(data, media_type=mime,
+                    headers={"Cache-Control": "public, max-age=31536000, immutable"})   # the ?v= in the URL changes on every upload
+
+@app.get("/pictures/{picture_id}", dependencies=[Depends(login_required)])
+def design_picture(picture_id: int):
+    """A design picture (banner, watermark) by its number. A stored picture never changes, so the
+    browser may keep it for good."""
+    found = pictures.load(picture_id)
+    if found is None:
+        return Response(status_code=404)
+    data, mime = found
+    return Response(data, media_type=mime, headers={"Cache-Control": "private, max-age=31536000, immutable"})
 
 branding.seed_legacy_logos()     # acts once, only on an installation upgraded from the Barangay 4 edition
 
@@ -2138,6 +2150,7 @@ def wizard_page(request: Request, step: str, form: dict | None = None, error: st
         "logos": logos,
         "skipped": skipped,
         "error": error,
+        "office_colors": branding.OFFICE_COLORS,
     }, status_code=status_code)
 
 @app.get("/wizard", dependencies=[Depends(wizard_login)])
@@ -2158,11 +2171,12 @@ def show_wizard_step(request: Request, step: str):
 
 @app.post("/wizard/profile", dependencies=[Depends(wizard_login)])
 def save_wizard_profile(request: Request, barangay_name: str = Form(""), municipality: str = Form(""),
-                        province: str = Form(""), header_line_1: str = Form(""), header_line_2: str = Form("")):
+                        province: str = Form(""), header_line_1: str = Form(""), header_line_2: str = Form(""),
+                        office_color: str = Form("")):
     blocked = wizard_gate("profile")
     if blocked:
         return blocked
-    new = profile_values(barangay_name, municipality, province, header_line_1, header_line_2)
+    new = profile_values(barangay_name, municipality, province, header_line_1, header_line_2, office_color)
     error = branding.validate_profile(new)
     if error:
         return wizard_page(request, "profile", form=new, error=error, status_code=400)
@@ -2286,16 +2300,41 @@ def editor_values(row) -> dict:
             "default_fee": doc_templates.format_fee_input(row.default_fee_centavos),
             "use_validity": row.validity_months is not None, "validity_months": row.validity_months or 6,
             "extras": [e for e in row.extras.split(",") if e], "print_fee": bool(row.print_fee),
-            "auto_bold": bool(row.auto_bold), "auto_indent": bool(row.auto_indent), "signers": row.signers}
+            "auto_bold": bool(row.auto_bold), "signers": row.signers,
+            "design": design_of(row), "font_half_pt": row.font_half_pt,
+            "line_spacing": row.line_spacing, "para_gap": row.para_gap}
+
+def look_of(row) -> dict:
+    """How a template's wording is spaced (step 8c). The automatic indent is gone: indents come from Tab."""
+    return documents.look(row.font_half_pt, row.line_spacing, row.para_gap)
+
+def design_of(row):
+    """The design of a template (a dict), or None for a plain page. It was checked when it was saved."""
+    if not row.design_json:
+        return None
+    try:
+        return documents.parse_design(row.design_json)
+    except ValueError:
+        log.exception("The saved design of template %s could not be read; printing a plain page", row.id)
+        return None
+
+def other_designs(db, template_id: int) -> dict:
+    """For "Copy the design from": every other template that has a design."""
+    return {r.id: {"name": r.name, "design": design_of(r)}
+            for r in db.query(DocumentTemplate).filter(DocumentTemplate.id != template_id,
+                                                       DocumentTemplate.design_json.isnot(None)).order_by(DocumentTemplate.id)
+            if design_of(r)}
 
 def signer_options(b: dict) -> dict:
     """The choices for "who signs", worded with the titles from Settings."""
     return {"both": f'{b["secretary_title"]} and {b["captain_title"]}',
             "captain": f'{b["captain_title"]} only', "secretary": f'{b["secretary_title"]} only'}
-    
+
 def render_template_editor(request: Request, row, form: dict | None = None, error: str | None = None, status_code: int = 200):
     """`form` is what was typed when a save failed, so nothing is lost."""
     shown = {**editor_values(row), **(form or {})}
+    with SessionLocal() as db:
+        designs = other_designs(db, row.id)
     return templates.TemplateResponse(request, "template_editor.html", {
         "t": {"id": row.id, "builtin": row.builtin_key is not None,
               "customized": row.builtin_key is not None and row.body is not None},
@@ -2304,21 +2343,41 @@ def render_template_editor(request: Request, row, form: dict | None = None, erro
         "validity_field": doc_templates.VALIDITY_FIELD,
         "available": doc_templates.available_fields(shown["extras"], shown["use_validity"]),
         "signer_options": signer_options(branding.get_branding()),
+        "designs": designs, "design_mm": documents.DESIGN_MM, "layers": documents.LAYERS,
+        "font_sizes": documents.FONT_SIZES, "print_design": documents.for_print(shown["design"]),
+        "line_spacings": documents.LINE_SPACINGS, "para_gaps": documents.PARA_GAPS,
+        "look": documents.look(shown["font_half_pt"], shown["line_spacing"], shown["para_gap"]),
     }, status_code=status_code)
 
 def read_template_form(db, template_id, name, body, code_prefix, default_fee, use_validity, validity_months, extras,
-                       print_fee, auto_bold, auto_indent, signers):
+                       print_fee, auto_bold, signers, design_text: str, font_half_pt: str, line_spacing: str,
+                       para_gap: str):
     """Returns (values to save, what she typed, error). Exactly one of values / error is None."""
     typed = {"name": clean_text(name, 60), "body": doc_templates.normalize_body(body),
              "code_prefix": code_prefix.strip().upper(), "default_fee": default_fee.strip(),
              "use_validity": use_validity == "1", "validity_months": validity_months.strip() or "6",
              "extras": doc_templates.clean_extras(extras), "print_fee": print_fee == "1",
-             "auto_bold": auto_bold == "1", "auto_indent": auto_indent == "1",
-             "signers": signers if signers in doc_templates.SIGNER_CHOICES else "both"}
+             "auto_bold": auto_bold == "1",
+             "line_spacing": int(line_spacing) if line_spacing.strip().isdigit() and int(line_spacing) in documents.LINE_SPACINGS else 115,
+             "para_gap": para_gap if para_gap in documents.PARA_GAPS else "small",
+             "signers": signers if signers in doc_templates.SIGNER_CHOICES else "both",
+             "design": None, "font_half_pt": documents.DEFAULT_FONT}
+    try:                                                       # shown again as it was if the save fails
+        typed["design"] = documents.parse_design(design_text)
+    except ValueError:
+        pass
+    if font_half_pt.strip().isdigit() and int(font_half_pt) in documents.FONT_SIZES:
+        typed["font_half_pt"] = int(font_half_pt)
     try:
         problem = template_name_error(db, typed["name"], template_id)
         if problem:
             raise ValueError(problem)
+        design = documents.parse_design(design_text)
+        chosen = documents.pictures_of(design)
+        if set(chosen) - pictures.existing(db, chosen):
+            raise ValueError("A picture of the design could not be found. Please load the design again.")
+        font = documents.parse_font(font_half_pt)
+        spacing = documents.parse_spacing(line_spacing, para_gap)
         prefix = doc_templates.parse_prefix(typed["code_prefix"])
         fee = doc_templates.parse_fee(typed["default_fee"])
         months = doc_templates.parse_months(typed["validity_months"]) if typed["use_validity"] else None
@@ -2330,7 +2389,8 @@ def read_template_form(db, template_id, name, body, code_prefix, default_fee, us
         return None, typed, problem
     return {"name": typed["name"], "body": typed["body"], "code_prefix": prefix, "default_fee_centavos": fee,
             "validity_months": months, "extras": ",".join(typed["extras"]), "print_fee": typed["print_fee"],
-            "auto_bold": typed["auto_bold"], "auto_indent": typed["auto_indent"], "signers": typed["signers"]}, typed, None
+            "auto_bold": typed["auto_bold"], "signers": typed["signers"],
+            "design": design, "font_half_pt": font, "line_spacing": spacing[0], "para_gap": spacing[1]}, typed, None
 
 @app.get("/documents/templates/{template_id}/edit", dependencies=[Depends(admin_required)])
 def edit_template_page(request: Request, template_id: int):
@@ -2344,14 +2404,16 @@ def edit_template_page(request: Request, template_id: int):
 def save_template(request: Request, template_id: int, name: str = Form(""), body: str = Form(""),
                   code_prefix: str = Form(""), default_fee: str = Form(""), use_validity: str = Form(""),
                   validity_months: str = Form(""), extras: list[str] = Form(default=[]), print_fee: str = Form(""),
-                  auto_bold: str = Form(""), auto_indent: str = Form(""), signers: str = Form("both")):
+                  auto_bold: str = Form(""), signers: str = Form("both"),
+                  design: str = Form(""), font_half_pt: str = Form("21"), line_spacing: str = Form("115"),
+                  para_gap: str = Form("small")):
     with SessionLocal() as db:
         row = db.get(DocumentTemplate, template_id)
         if row is None:
             return RedirectResponse(url="/documents/templates", status_code=303)
         values, typed, error = read_template_form(db, row.id, name, body, code_prefix, default_fee,
                                                   use_validity, validity_months, extras, print_fee,
-                                                  auto_bold, auto_indent, signers)
+                                                  auto_bold, signers, design, font_half_pt, line_spacing, para_gap)
         if error:
             return render_template_editor(request, row, form=typed, error=error, status_code=400)
 
@@ -2373,10 +2435,19 @@ def save_template(request: Request, template_id: int, name: str = Form(""), body
             changes.append("print fee " + ("on" if values["print_fee"] else "off"))
         if bool(row.auto_bold) != values["auto_bold"]:
             changes.append("automatic bold " + ("on" if values["auto_bold"] else "off"))
-        if bool(row.auto_indent) != values["auto_indent"]:
-            changes.append("automatic indent " + ("on" if values["auto_indent"] else "off"))
+        if row.line_spacing != values["line_spacing"]:
+            changes.append(f'line spacing {documents.LINE_SPACINGS.get(row.line_spacing, "?")} -> '
+                           f'{documents.LINE_SPACINGS[values["line_spacing"]]}')
+        if row.para_gap != values["para_gap"]:
+            changes.append(f'space after paragraphs {documents.PARA_GAPS[values["para_gap"]][0].lower()}')
         if row.signers != values["signers"]:
             changes.append(f'signed by {row.signers} -> {values["signers"]}')
+        design_changed = documents.design_changes(design_of(row), values["design"])
+        if design_changed:
+            changes.append("design: " + ", ".join(design_changed))
+        if row.font_half_pt != values["font_half_pt"]:
+            changes.append(f'text size {documents.FONT_SIZES.get(row.font_half_pt, "?")} -> '
+                           f'{documents.FONT_SIZES[values["font_half_pt"]]} pt')
 
         # A built-in whose wording is back to the original keeps following the code (nothing saved)
         same_as_original = (row.builtin_key is not None
@@ -2385,7 +2456,10 @@ def save_template(request: Request, template_id: int, name: str = Form(""), body
         row.body = None if same_as_original else values["body"]
         row.default_fee_centavos, row.validity_months = values["default_fee_centavos"], values["validity_months"]
         row.extras, row.print_fee = values["extras"], values["print_fee"]
-        row.auto_bold, row.auto_indent, row.signers = values["auto_bold"], values["auto_indent"], values["signers"]
+        row.auto_bold, row.signers = values["auto_bold"], values["signers"]
+        row.line_spacing, row.para_gap = values["line_spacing"], values["para_gap"]
+        row.design_json = documents.to_json(values["design"]) if values["design"] else None
+        row.font_half_pt = values["font_half_pt"]
         db.commit()
         saved_name = values["name"]
     if changes:
@@ -2421,6 +2495,22 @@ def preview_template(body: str = Form(""), default_fee: str = Form(""), use_vali
     return JSONResponse({"paragraphs": doc_templates.render_paragraphs(text, values, auto_bold == "1"),
                          "error": error, "has_number": doc_templates.has_control_number(text)})
 
+# ---- loading a design: from a Word file, or from a picture of the whole blank page. The pictures are
+# stored at once (so the preview can show them); the template itself only changes on Save template.
+@app.post("/documents/designs/import", dependencies=[Depends(admin_required)])
+def import_design(request: Request, design_file: UploadFile | None = File(None), kind: str = Form("")):
+    if kind not in ("docx", "picture") or design_file is None or not design_file.filename:
+        return JSONResponse({"error": "Please choose a file."}, status_code=400)
+    file_name = clean_text(design_file.filename, 120)
+    limit = docx_design.MAX_FILE_BYTES if kind == "docx" else pictures.DESIGN_MAX_BYTES
+    try:
+        design, notes = docx_design.build_design(kind, design_file.file.read(limit + 1), file_name, pictures.store)
+        design = documents.parse_design(documents.to_json(design))      # the same checks as on Save
+    except (docx_design.DocxError, pictures.PictureError, ValueError) as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    log.info("Design loaded from %s %r: %s picture(s)", kind, file_name, len(design["items"]))
+    return JSONResponse({"design": design, "notes": notes})
+
 # ---- restore, duplicate, new, turn on / off, delete
 @app.post("/documents/templates/{template_id}/restore", dependencies=[Depends(admin_required)])
 def restore_template(request: Request, template_id: int):
@@ -2448,7 +2538,9 @@ def duplicate_template(request: Request, template_id: int):
             builtin_key=None, name=unique_template_name(db, row.name), body=effective_body(row),
             code_prefix=row.code_prefix, extras=row.extras, default_fee_centavos=row.default_fee_centavos,
             validity_months=row.validity_months, print_fee=row.print_fee, is_active=True,
-            auto_bold=row.auto_bold, auto_indent=row.auto_indent, signers=row.signers)
+            auto_bold=row.auto_bold, auto_indent=row.auto_indent, signers=row.signers,
+            line_spacing=row.line_spacing, para_gap=row.para_gap)
+        copy.design_json, copy.font_half_pt = row.design_json, row.font_half_pt
         db.add(copy)
         db.commit()
         copy_id, copy_name, original = copy.id, copy.name, row.name
@@ -2586,8 +2678,9 @@ def render_issue_form(request: Request, row, form: dict, ticket_number: str, tic
     used = doc_templates.fields_used(effective_body(row))
     b = branding.get_branding()
     return templates.TemplateResponse(request, "document_form.html", {
-        "t": {"id": row.id, "name": row.name, "extras": [e for e in row.extras.split(",") if e],
-              "auto_indent": bool(row.auto_indent)},
+        "t": {"id": row.id, "name": row.name, "extras": [e for e in row.extras.split(",") if e]},
+        "look": look_of(row),
+        "design": documents.for_print(design_of(row)),
         "shown": form, "error": error, "token": token, "today": date.today().isoformat(),
         "civil_statuses": documents.CIVIL_STATUSES,
         "required": {"address": "Address" in used, "purpose": "Purpose" in used},
@@ -2626,16 +2719,19 @@ def issue_form(request: Request, template_id: int, client_name: str = "", addres
             carry["ticket_number"], carry["ticket_date"] = queued.ticket_number, queued.created_at.date().isoformat()
 
         form = {"client_name": carry.get("client_name", ""), "address": carry.get("address", ""), "purpose": "",
-        "issue_date": date.today().isoformat(), "age": "", "civil_status": "",
-        "nationality": documents.DEFAULT_NATIONALITY, "years": "",
-        "fee": doc_templates.format_fee_input(row.default_fee_centavos), "or_choice": "", "or_number": "",
-        "signers": row.signers}
+                "issue_date": date.today().isoformat(), "age": "", "civil_status": "",
+                "nationality": documents.DEFAULT_NATIONALITY, "years": "",
+                "ctc_number": "", "ctc_place": "", "ctc_date": "",
+                "fee": doc_templates.format_fee_input(row.default_fee_centavos), "or_choice": "", "or_number": "",
+                "signers": row.signers}
         if original:                                 # a corrected copy starts from the voided one (dated today)
             old = documents.from_json(original.extras, {})
             form.update({"client_name": original.recipient, "address": original.address or "",
                          "purpose": original.purpose or "", "age": old.get("age", ""),
                          "civil_status": old.get("civil_status", ""), "years": old.get("years", ""),
                          "nationality": old.get("nationality", documents.DEFAULT_NATIONALITY),
+                         "ctc_number": old.get("ctc_number", ""), "ctc_place": old.get("ctc_place", ""),
+                         "ctc_date": old.get("ctc_date", ""),
                          "signers": documents.from_json(original.print_snapshot, {}).get("signers", row.signers),
                          "fee": doc_templates.format_fee_input(original.fee_centavos),
                          "or_choice": {"provided": "enter", "not_available": "none"}.get(original.or_status, ""),
@@ -2648,14 +2744,17 @@ def issue_form(request: Request, template_id: int, client_name: str = "", addres
 @app.post("/documents/issue/{template_id}/preview", dependencies=[Depends(login_required)])
 def preview_issue(template_id: int, client_name: str = Form(""), address: str = Form(""), purpose: str = Form(""),
                   issue_date: str = Form(""), age: str = Form(""), civil_status: str = Form(""),
-                  nationality: str = Form(""), years: str = Form(""), fee: str = Form(""), or_choice: str = Form(""), or_number: str = Form("")):
+                  nationality: str = Form(""), years: str = Form(""), fee: str = Form(""), or_choice: str = Form(""),
+                  or_number: str = Form(""), ctc_number: str = Form(""), ctc_place: str = Form(""),
+                  ctc_date: str = Form("")):
     """The live preview next to the form: the same code that prints, with a [Field name] where
     something is not typed yet. Saves nothing and uses no control number."""
     with SessionLocal() as db:
         row = db.get(DocumentTemplate, template_id)
         if row is None:
             return JSONResponse({"paragraphs": [], "fee_line": None})
-        body, months, print_fee = effective_body(row), row.validity_months, bool(row.print_fee), auto_bold = bool(row.auto_bold)
+        body, months, print_fee = effective_body(row), row.validity_months, bool(row.print_fee)
+        auto_bold = bool(row.auto_bold)
     try:
         when = documents.parse_issue_date(issue_date, date.today())
     except documents.IssueError:
@@ -2670,7 +2769,10 @@ def preview_issue(template_id: int, client_name: str = Form(""), address: str = 
              "address": clean_text(address, 150) or "[Address]", "purpose": clean_text(purpose, 150) or "[Purpose]",
              "issue_date": when, "fee_centavos": fee_centavos, "or_number": number or None,
              "extras": {"age": clean_text(age, 3) or "[Age]", "civil_status": clean_text(civil_status, 20) or "[Civil status]",
-             "nationality": clean_text(nationality, 40) or "[Nationality]", "years": clean_text(years, 3) or "[Years of residence]"}}
+                        "nationality": clean_text(nationality, 40) or "[Nationality]",
+                        "ctc_number": clean_text(ctc_number, 30), "ctc_place": clean_text(ctc_place, 60),
+                        "ctc_date": ctc_date.strip(),
+                        "years": clean_text(years, 3) or "[Years of residence]"}}
     paragraphs = doc_templates.render_paragraphs(
         body, documents.values_for(entry, b, months, control_number="[Control number]"), auto_bold)
     return JSONResponse({"paragraphs": paragraphs,
@@ -2682,6 +2784,7 @@ def issue_document(request: Request, template_id: int, issue_token: str = Form("
                    issue_date: str = Form(""), age: str = Form(""), civil_status: str = Form(""),
                    nationality: str = Form(""), years: str = Form(""), fee: str = Form(""), or_choice: str = Form(""),
                    or_number: str = Form(""), signers: str = Form(""),
+                   ctc_number: str = Form(""), ctc_place: str = Form(""), ctc_date: str = Form(""),
                    ticket_number: str = Form(""), ticket_date: str = Form(""), copy_of: str = Form("")):
     expected = request.session.pop("issue_token", None)
     if not expected or not secrets.compare_digest(expected, issue_token):
@@ -2691,10 +2794,11 @@ def issue_document(request: Request, template_id: int, issue_token: str = Form("
     ticket_number = ticket_number if TICKET_RE.match(ticket_number) else ""
     ticket_day = parse_date(ticket_date) if ticket_number else None
     raw = {"client_name": clean_text(client_name, 100), "address": clean_text(address, 150),
-        "purpose": clean_text(purpose, 150), "issue_date": issue_date.strip(), "age": age.strip(),
-        "civil_status": civil_status.strip(), "nationality": clean_text(nationality, 40), "years": years.strip(),
-        "fee": fee.strip(), "or_choice": or_choice.strip(), "or_number": clean_text(or_number, 40),
-        "signers": signers.strip()}
+           "purpose": clean_text(purpose, 150), "issue_date": issue_date.strip(), "age": age.strip(),
+           "civil_status": civil_status.strip(), "nationality": clean_text(nationality, 40), "years": years.strip(),
+           "fee": fee.strip(), "or_choice": or_choice.strip(), "or_number": clean_text(or_number, 40),
+           "signers": signers.strip(), "ctc_number": clean_text(ctc_number, 30),
+           "ctc_place": clean_text(ctc_place, 60), "ctc_date": ctc_date.strip()}
     b = branding.get_branding()
     with SessionLocal() as db:
         row = db.get(DocumentTemplate, template_id)
@@ -2738,7 +2842,7 @@ def issue_document(request: Request, template_id: int, issue_token: str = Form("
                 or_number=entry["or_number"], or_status=entry["or_status"],
                 final_text=documents.to_json(paragraphs),                      # frozen: a later template edit never changes it
                 print_snapshot=documents.to_json(documents.make_snapshot(
-                    b, row.print_fee, signers=entry["signers"], auto_indent=bool(row.auto_indent))),
+                    b, row.print_fee, signers=entry["signers"], design=design_of(row), text_look=look_of(row))),
                 issued_by=admin.username if admin else "unknown",
                 ticket_number=ticket_number or None, ticket_date=ticket_day, status="issued",
                 created_at=datetime.now())
@@ -2775,14 +2879,21 @@ def print_document(request: Request, doc_id: int, first: str = ""):
         log_action("Documents", "Document Reprinted", f"Opened {view['control_number']} for printing", request)
     return templates.TemplateResponse(request, "document_print.html", {
         "rec": view, "voided": voided, "first": is_first, "has_ticket": has_ticket,
-        "paragraphs": paragraphs, "fee_line": fee_text, "tab": doc_templates.TAB,
+        "paragraphs": [doc_templates.paragraph_lines(p) for p in paragraphs], "fee_line": fee_text,
+        "tab": doc_templates.TAB,
+        # Documents issued before step 8b: a plain page at the old size
+        "design": documents.for_print(documents.snapshot_design(snapshot)),
         # Documents issued before step 8a: indented, both signers, and the number on its own fixed line
-        "auto_indent": snapshot.get("auto_indent", True), "number_line": not snapshot.get("number_in_text", False),
+        "number_line": not snapshot.get("number_in_text", False),
+        "look": documents.snapshot_look(snapshot),              # the spacing it was printed with
         "sign_lines": [{"name": snapshot.get(f"{who}_name", b[f"{who}_name"]),
                         "title": snapshot.get(f"{who}_title", b[f"{who}_title"])}
                        for who in documents.SIGNER_LINES.get(snapshot.get("signers", "both"), documents.SIGNER_LINES["both"])],
         # Names and header lines come from the saved copy (as issued); the logos are today's
-        "hdr": {"full_name": snapshot.get("full_name", b["full_name"]),
+        # Documents issued before step 8c kept the name as one line ("Barangay X, City, Province")
+        "hdr": {"name": snapshot.get("name", snapshot.get("full_name", b["full_name"])),
+                "place": snapshot.get("place", "" if "full_name" in snapshot else b["place"]),
+                "office_color": branding.clean_color(snapshot.get("office_color", "")) or b["office_color"],
                 "header_line_1": snapshot.get("header_line_1", b["header_line_1"]),
                 "header_line_2": snapshot.get("header_line_2", b["header_line_2"]), "logos": b["logos"]},
     })

@@ -1,20 +1,19 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, doc_header, documents_tabs %}
+{% from "_macros.html" import icon, doc_header, documents_tabs, cert_open, cert_layers %}
 {% block title %}Issue {{ t.name }}{% endblock %}
 {% block page_title %}Documents{% endblock %}
 {% block page_subtitle %}Issue a document{% endblock %}
 {% block description %}Fill in the details and print the document{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="/static/document_header.css">
+<link rel="stylesheet" href="/static/certificate.css">
 {% endblock %}
 {% block content %}
 {{ documents_tabs('issue') }}
 
-{% if names_missing %}
 <div class="alert alert-warn" role="status" id="names-warning" hidden>The name of the <span id="names-missing"></span>
     is not set yet, so this document cannot be printed with the signer you chose. Fill it in under
     <a href="/settings#signatories">Settings</a>, or choose another signer.</div>
-{% endif %}
 
 <div class="editor-layout">
     <section class="card">
@@ -79,7 +78,7 @@
                     <input type="text" name="nationality" id="nationality" value="{{ shown.nationality }}"
                         maxlength="40" autocomplete="off" required>
                 </div>
-                {% endif %}                
+                {% endif %}
                 {% if 'years' in t.extras %}
                 <div class="field">
                     <label for="years">Years of residence</label>
@@ -89,7 +88,31 @@
                 {% endif %}
             </div>
             {% endif %}
-            
+
+            {% if 'ctc' in t.extras %}
+            <fieldset class="field">
+                <legend>Community Tax Certificate (CTC)</legend>
+                <div class="form-row">
+                    <div class="field">
+                        <label for="ctc_number">CTC No.</label>
+                        <input type="text" name="ctc_number" id="ctc_number" value="{{ shown.ctc_number }}" maxlength="30"
+                            autocomplete="off">
+                    </div>
+                    <div class="field">
+                        <label for="ctc_place">Issued at</label>
+                        <input type="text" name="ctc_place" id="ctc_place" value="{{ shown.ctc_place }}" maxlength="60"
+                            placeholder="e.g. Santiago City" autocomplete="off">
+                    </div>
+                    <div class="field">
+                        <label for="ctc_date">Issued on</label>
+                        <input type="date" name="ctc_date" id="ctc_date" value="{{ shown.ctc_date }}" max="{{ today }}">
+                    </div>
+                </div>
+                <p class="hint">Copy these from the client's cedula. If the client has none, leave them empty: a blank line
+                    prints, to be filled in by hand. The date prints like 12/31/2025.</p>
+            </fieldset>
+            {% endif %}
+
             <div class="field">
                 <label for="signers">Signed by</label>
                 <select name="signers" id="signers">
@@ -99,7 +122,7 @@
                 </select>
                 <p class="hint">Starts on the usual choice for this document. Change it only for this one if needed.</p>
             </div>
-            
+
             <fieldset class="field">
                 <legend>Fee</legend>
                 <div class="field">
@@ -137,18 +160,27 @@
     <aside class="editor-preview" aria-label="Preview">
         <section class="card">
             <h2 class="card-title">Preview</h2>
-            <div class="paper-preview">
-                {{ doc_header(branding) }}
-                <h2 class="tpl-title">{{ t.name|upper }}</h2>
-                <div class="tpl-body{% if not t.auto_indent %} no-indent{% endif %}" id="tpl-body"></div>
-                <p class="fee-line" id="fee-line" hidden></p>
-                <div class="tpl-signs" id="tpl-signs">
-                    <div data-signer="secretary"><span class="tpl-sign-name">{{ branding.secretary_name|upper }}</span><small>{{
-                            branding.secretary_title }}</small></div>
-                    <div data-signer="captain"><span class="tpl-sign-name">{{ branding.captain_name|upper }}</span><small>{{
-                            branding.captain_title }}</small></div>
+            <p class="hint">This is the whole page, with this document's design. [Control number] is filled in
+                when you press Print.</p>
+            <p class="hint hint-warn" data-overflow-note hidden>The text runs past the bottom of the paper, so it would
+                print on two pages. Make the text size or the space above or below the text smaller, or shorten the
+                wording.</p>
+            <div class="cert-frame">
+                {{ cert_open(design, look) }}
+                    {{ cert_layers(design) }}
+                    <div class="cert-content">
+                        {% if design.header == 'show' %}{{ doc_header(branding) }}{% endif %}
+                        <h1 class="title">{{ t.name|upper }}</h1>
+                        <div class="body no-indent" id="tpl-body"></div>
+                        <p class="fee-line" id="fee-line" hidden></p>
+                        <div class="signatures" id="tpl-signs">
+                            <div class="sign" data-signer="secretary"><span class="name">{{ branding.secretary_name|upper }}</span>
+                                <div class="title">{{ branding.secretary_title }}</div></div>
+                            <div class="sign" data-signer="captain"><span class="name">{{ branding.captain_name|upper }}</span>
+                                <div class="title">{{ branding.captain_title }}</div></div>
+                        </div>
+                    </div>
                 </div>
-                <p class="hint">[Control number] is filled in when you press Print.</p>
             </div>
         </section>
     </aside>
@@ -186,7 +218,6 @@
             e.currentTarget.href = '/documents' + (query ? '?' + query : '');
         });
 
-
         // Who signs: show those signature lines, and stop Print when a chosen signer has no name yet
         const missing = {{ missing|tojson }};
         function syncSigners() {
@@ -200,7 +231,6 @@
 
         // The preview is made by the server, so it is exactly what will print
         const draw = (paragraphs) => window.drawDocParagraphs(previewBody, paragraphs);
-        
         let timer = null;
         let latest = 0;
         async function refresh() {

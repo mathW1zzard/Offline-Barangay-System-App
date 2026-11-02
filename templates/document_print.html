@@ -1,4 +1,4 @@
-{% from "_macros.html" import doc_header %}
+{% from "_macros.html" import doc_header, cert_open, cert_layers, cert_body %}
 <!DOCTYPE html>
 <html lang="en">
 
@@ -7,9 +7,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ rec.control_number }} | {{ rec.template_name }}</title>
     <link rel="stylesheet" href="/static/document_header.css">
+    <link rel="stylesheet" href="/static/certificate.css">
     <style>
         /* No page margin: the browser then has no room for its own date, title and address lines.
-           The paper size is chosen in the print window. */
+           The paper size is chosen in the print window. The look of the certificate itself is in
+           certificate.css, shared with the live previews. */
         @page { margin: 0; }
 
         :root {
@@ -56,6 +58,12 @@
             font-size: 16px;
         }
 
+        .toolbar-paper {
+            flex-basis: 100%;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
         .toolbar-text.is-void {
             color: var(--red);
             font-weight: 700;
@@ -87,104 +95,10 @@
             cursor: not-allowed;
         }
 
-        .page {
-            position: relative;
-            width: 100%;
-            max-width: 900px;
+        /* On screen: the sheet of paper in the middle, with a shadow */
+        .sheet-area .cert {
             margin: 24px auto 48px;
-            background: #fff;
-            padding: 40px 44px;
             box-shadow: 0 2px 14px rgba(27, 42, 74, .18);
-        }
-
-        .control-no {
-            text-align: right;
-            margin: 14px 0 0;
-            font-size: 13px;
-            color: var(--muted);
-        }
-
-        .control-no strong {
-            color: var(--navy);
-            letter-spacing: .03em;
-        }
-
-        .title {
-            text-align: center;
-            margin: 22px 0 22px;
-            font-size: 21px;
-            letter-spacing: .05em;
-        }
-
-        .body p {
-            margin: 0 0 16px;
-            line-height: 1.85;
-            text-align: justify;
-            text-indent: 48px;
-        }
-        /* Templates with "Indent the first line automatically" turned off */
-        .body.no-indent p {
-            text-indent: 0;
-        }
-
-        /* A Tab typed in the wording: a fixed gap, the same width as the automatic indent */
-        .body .tab {
-            display: inline-block;
-            width: 48px;
-        }
-        .fee-line {
-            margin: 26px 0 0;
-            font-size: 13px;
-            color: var(--navy);
-        }
-
-        .signatures {
-            display: flex;
-            justify-content: space-between;
-            gap: 40px;
-            margin-top: 64px;
-            break-inside: avoid;
-        }
-
-        .sign {
-            min-width: 220px;
-            flex: 0 1 280px;
-        }
-
-        .sign .name {
-            display: block;
-            border-bottom: 1px solid var(--navy);
-            font-weight: 700;
-            padding-bottom: 2px;
-            min-height: 22px;
-            margin-top: 38px;
-            text-align: center;
-        }
-
-        .sign .title {
-            color: var(--muted);
-            font-size: 12px;
-            margin-top: 4px;
-            text-align: center;
-        }
-
-        .void-mark {
-            position: absolute;
-            inset: 0;
-            display: grid;
-            place-items: center;
-            pointer-events: none;
-        }
-
-        .void-mark span {
-            font-size: 150px;
-            font-weight: 800;
-            letter-spacing: .1em;
-            color: rgba(185, 28, 28, .22);
-            transform: rotate(-28deg);
-            border: 14px solid rgba(185, 28, 28, .22);
-            padding: 0 30px;
-            border-radius: 20px;
         }
 
         @media print {
@@ -196,16 +110,9 @@
                 display: none;
             }
 
-            .page {
-                max-width: none;
+            .sheet-area .cert {
                 margin: 0;
-                padding: 15mm 18mm;
                 box-shadow: none;
-            }
-
-            * {
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
             }
         }
     </style>
@@ -227,37 +134,43 @@
         <button type="button" class="btn btn-print" onclick="window.print()">Print again</button>
         {% else %}
         <div class="toolbar-text">Reprint of <strong>{{ rec.control_number }}</strong>, issued {{ rec.issue_date_text
-            }}. It prints the saved text, not the current template.</div>
+            }}. It prints the saved text and design, not the current template.</div>
         <a class="btn btn-back" href="/documents/history">Back to issued documents</a>
         <button type="button" class="btn btn-print" onclick="window.print()">Print</button>
         {% endif %}
+        {% if design['items'] %}
+        <div class="toolbar-paper">This design is made for paper {{ '%.1f'|format(design.page_w / 25.4) }} x {{
+            '%.1f'|format(design.page_h / 25.4) }} in. Choose that paper size in the print window.</div>
+        {% endif %}
     </div>
 
-    <div class="page">
-        {% if voided %}<div class="void-mark" aria-hidden="true"><span>VOID</span></div>{% endif %}
-        {{ doc_header(hdr) }}
-        {# Documents issued before step 8a keep the number on its own line; newer ones have it in the wording #}
-        {% if number_line %}<p class="control-no">Control No.: <strong>{{ rec.control_number }}</strong></p>{% endif %}
-        <h1 class="title">{{ rec.template_name|upper }}</h1>
-        <div class="body{% if not auto_indent %} no-indent{% endif %}">
-            {% for pairs in paragraphs %}<p>{% for text, bold in pairs %}{% if text == tab %}<span class="tab"></span>{%
-                elif bold %}<strong>{{ text }}</strong>{% else %}{{ text }}{% endif %}{% endfor %}</p>
-            {% endfor %}
-        </div>
-        {% if fee_line %}<p class="fee-line">{{ fee_line }}</p>{% endif %}
-        {# One signer prints on the right; two print left and right #}
-        <div class="signatures"{% if sign_lines|length == 1 %} style="justify-content: flex-end"{% endif %}>
-            {% for line in sign_lines %}
-            <div class="sign">
-                <span class="name">{{ line.name|upper }}</span>
-                <div class="title">{{ line.title }}</div>
+    <div class="sheet-area">
+        {{ cert_open(design, look) }}
+            {{ cert_layers(design) }}
+            {% if voided %}<div class="void-mark" aria-hidden="true"><span>VOID</span></div>{% endif %}
+            <div class="cert-content">
+                {% if design.header == 'show' %}{{ doc_header(hdr) }}{% endif %}
+                {# Documents issued before step 8a keep the number on its own line; newer ones have it in the wording #}
+                {% if number_line %}<p class="control-no">Control No.: <strong>{{ rec.control_number }}</strong></p>{% endif %}
+                <h1 class="title">{{ rec.template_name|upper }}</h1>
+                {{ cert_body(paragraphs, look, tab) }}
+                {% if fee_line %}<p class="fee-line">{{ fee_line }}</p>{% endif %}
+                {# One signer prints on the right; two print left and right #}
+                <div class="signatures{% if sign_lines|length == 1 %} single{% endif %}">
+                    {% for line in sign_lines %}
+                    <div class="sign">
+                        <span class="name">{{ line.name|upper }}</span>
+                        <div class="title">{{ line.title }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
-            {% endfor %}
         </div>
     </div>
     {% if first and not voided %}
     <script>
-        // Open the print window once. The address is then cleaned so a refresh counts as a reprint.
+        // Open the print window once (after the pictures have loaded). The address is then cleaned so
+        // a refresh counts as a reprint.
         window.addEventListener('load', () => {
             setTimeout(() => { history.replaceState(null, '', location.pathname); window.print(); }, 400);
         });

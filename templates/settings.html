@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, doc_header %}
+{% from "_macros.html" import icon, doc_header, color_choice %}
 {% block title %}Settings{% endblock %}
 {% block page_title %}Settings{% endblock %}
 {% block page_subtitle %}Barangay profile and printouts{% endblock %}
@@ -60,8 +60,11 @@
                 {{ value_row('Name of your barangay', values.barangay_name) }}
                 {{ value_row('Municipality or city', values.municipality) }}
                 {{ value_row('Province', values.province) }}
-                {{ value_row('Line above the name', values.header_line_1, 'None') }}
-                {{ value_row('Line under the name', values.header_line_2, 'None') }}
+                {{ value_row('First line', values.header_line_1, 'None') }}
+                {{ value_row('Office line (below the logos)', values.header_line_2, 'None') }}
+                <dt>Colour of the office line</dt>
+                <dd><span class="color-dot" style="background: {{ branding.office_color }}"></span>
+                    {{ office_colors.get(branding.office_color, 'Own colour') }}</dd>
             </dl>
         </section>
 
@@ -159,19 +162,22 @@
         </div>
         <div class="form-row">
             <div class="field">
-                <label for="header_line_1">Line above the barangay name</label>
+                <label for="header_line_1">First line (above the municipality)</label>
                 <input type="text" name="header_line_1" id="header_line_1" value="{{ shown.header_line_1 }}"
-                    data-saved="{{ values.header_line_1 }}" maxlength="80" autocomplete="off">
+                    data-saved="{{ values.header_line_1 }}" placeholder="e.g. Republic of the Philippines" maxlength="80"
+                    autocomplete="off">
             </div>
             <div class="field">
-                <label for="header_line_2">Line under the barangay name (optional)</label>
+                <label for="header_line_2">Office line, below the logos (optional)</label>
                 <input type="text" name="header_line_2" id="header_line_2" value="{{ shown.header_line_2 }}"
-                    data-saved="{{ values.header_line_2 }}" placeholder="e.g. Office of the Barangay Captain"
+                    data-saved="{{ values.header_line_2 }}" placeholder="e.g. Office of the Punong Barangay"
                     maxlength="80" autocomplete="off">
             </div>
         </div>
-        <p class="hint">Type the name the way it should print. It appears at the top of every certificate and report,
-            and on the queue slip.</p>
+        {{ color_choice(office_colors, shown.office_color, values.office_color) }}
+        <p class="hint">Type the names the way they should print. The header shows: the first line, then
+            "Municipality or city, Province", then the barangay name, and the office line below the logos. It appears
+            at the top of every certificate and report; the queue slip shows the name.</p>
         <div class="modal-preview" data-preview-slot>
             <p class="label">Preview</p>
         </div>

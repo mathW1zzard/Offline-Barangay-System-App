@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Date, Text, Boolean, CheckConstraint
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Date, Text, Boolean, CheckConstraint, LargeBinary
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from datetime import datetime
 from pathlib import Path
@@ -132,6 +132,12 @@ class DocumentTemplate(Base):
         CheckConstraint("auto_bold IN (0, 1)", name="ck_templates_auto_bold"),
         CheckConstraint("auto_indent IN (0, 1)", name="ck_templates_auto_indent"),
         CheckConstraint("signers IN ('both', 'captain', 'secretary')", name="ck_templates_signers"),
+        # Added in migration v5 (step 8b): the design of the printed page and the size of the text
+        CheckConstraint("design_json IS NULL OR json_valid(design_json)", name="ck_templates_design_json"),
+        CheckConstraint("font_half_pt BETWEEN 18 AND 32", name="ck_templates_font_half_pt"),
+        # Added in migration v6 (step 8c): spacing of the wording
+        CheckConstraint("line_spacing IN (100, 115, 150, 200)", name="ck_templates_line_spacing"),
+        CheckConstraint("para_gap IN ('none', 'small', 'normal')", name="ck_templates_para_gap"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -144,11 +150,19 @@ class DocumentTemplate(Base):
     validity_months = Column(Integer, nullable=True)   # None = no expiry
     print_fee = Column(Boolean, nullable=False, default=True, server_default="1")
     is_active = Column(Boolean, nullable=False, default=True, server_default="1")
-    
     # Added in migration v4 (step 8a). The defaults keep every existing template looking as before.
     auto_bold = Column(Boolean, nullable=False, default=True, server_default="1")     # filled-in details print bold
     auto_indent = Column(Boolean, nullable=False, default=True, server_default="1")   # first line of each paragraph indented
     signers = Column(String, nullable=False, default="both", server_default="both")   # both / captain / secretary
+    # Added in migration v5 (step 8b). design_json: the design read from a Word file or a picture of
+    # the whole page (see documents.parse_design); NULL = a plain page, exactly as before.
+    # font_half_pt: the size of the wording in half points, like Word (21 = 10.5 pt, the size so far).
+    design_json = Column(Text, nullable=True)
+    font_half_pt = Column(Integer, nullable=False, default=21, server_default="21")
+    # Added in migration v6 (step 8c): line spacing in hundredths (115 = 1.15, like Word) and the
+    # space after each paragraph.
+    line_spacing = Column(Integer, nullable=False, default=115, server_default="115")
+    para_gap = Column(String, nullable=False, default="small", server_default="small")
     
 class IssuedDocument(Base):
     """One printed document. Everything is a plain copy so history survives edited templates,
@@ -186,6 +200,23 @@ class IssuedDocument(Base):
     void_reason = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     
+class Picture(Base):
+    """A picture kept inside the database (logos, design banners), so backups hold it too.
+    A row never changes and is never deleted (see pictures.py). The unique index on sha256 is
+    created in the migration, like the other indexes."""
+    __tablename__ = "pictures"
+    __table_args__ = (
+        CheckConstraint("mime IN ('image/png', 'image/jpeg')", name="ck_pictures_mime"),
+        CheckConstraint("width > 0 AND height > 0", name="ck_pictures_size"),
+    )
+    id = Column(Integer, primary_key=True)
+    sha256 = Column(String, nullable=False)       # fingerprint: the same picture is stored once
+    mime = Column(String, nullable=False)
+    data = Column(LargeBinary, nullable=False)
+    width = Column(Integer, nullable=False)
+    height = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
 class DocumentCounter(Base):
     __tablename__ = "document_counters"
     __table_args__ = (CheckConstraint("last_number >= 0", name="ck_doc_counters_last"),)
@@ -360,7 +391,72 @@ def _v4_wording_options(con):
                      AND instr(lower(body), '{control number}') = 0
                      AND length(body) + ? <= 5000""", (line, len(line)))
 
-MIGRATIONS = [_v1_counters_and_indexes, _v2_documents_settings_address, _v3_legacy_logo_flag, _v4_wording_options]
+def _png_size(data: bytes):
+    """Width and height from a PNG file's header (the saved logos are always PNG)."""
+    if data[:8] != b"\x89PNG\r\n\x1a\n" or len(data) < 24:
+        return None
+    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+
+def _v5_pictures_and_design(con):
+    """Step 8b: pictures inside the database, a design and a text size for each document template.
+    - pictures: logos and design pictures, so a backup (one copy of the database) holds them.
+    - Each template gets design_json (NULL = a plain page) and font_half_pt (21 = 10.5 pt, the size
+      used so far), so every template prints exactly as before until its design is changed.
+    - The logos saved as files next to the database are copied in, and Settings points at them.
+      The files are left where they are (nothing is deleted); the app simply stops reading them."""
+    con.execute("""CREATE TABLE IF NOT EXISTS pictures (
+        id INTEGER NOT NULL PRIMARY KEY,
+        sha256 VARCHAR NOT NULL,
+        mime VARCHAR NOT NULL,
+        data BLOB NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        created_at DATETIME,
+        CONSTRAINT ck_pictures_mime CHECK (mime IN ('image/png', 'image/jpeg')),
+        CONSTRAINT ck_pictures_size CHECK (width > 0 AND height > 0))""")
+    con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_pictures_sha256 ON pictures (sha256)")
+
+    _add_column(con, "document_templates", "design_json",
+                "TEXT CONSTRAINT ck_templates_design_json CHECK (design_json IS NULL OR json_valid(design_json))")
+    _add_column(con, "document_templates", "font_half_pt",
+                "INTEGER NOT NULL DEFAULT 21 CONSTRAINT ck_templates_font_half_pt CHECK (font_half_pt BETWEEN 18 AND 32)")
+
+    # The logos: from the files next to the database into the pictures table
+    import hashlib
+    for slot in ("left", "right", "third"):
+        in_use = con.execute('SELECT value FROM settings WHERE "key" = ?', (f"logo_{slot}_v",)).fetchone()
+        done = con.execute('SELECT value FROM settings WHERE "key" = ?', (f"logo_{slot}_pic",)).fetchone()
+        if not in_use or not in_use[0] or (done and done[0]):
+            continue                                   # no logo in this slot, or already copied
+        try:
+            data = Path(data_path(f"logo_{slot}.png")).read_bytes()
+        except OSError:
+            log.warning("Logo file for the %s slot is missing; that slot stays empty", slot)
+            continue
+        size = _png_size(data)
+        if size is None:
+            log.warning("Logo file for the %s slot is not a PNG; that slot stays empty", slot)
+            continue
+        digest = hashlib.sha256(data).hexdigest()
+        con.execute("""INSERT OR IGNORE INTO pictures (sha256, mime, data, width, height, created_at)
+                       VALUES (?, 'image/png', ?, ?, ?, ?)""",
+                    (digest, data, size[0], size[1], datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")))
+        picture_id = con.execute("SELECT id FROM pictures WHERE sha256 = ?", (digest,)).fetchone()[0]
+        con.execute('INSERT OR REPLACE INTO settings ("key", value) VALUES (?, ?)', (f"logo_{slot}_pic", str(picture_id)))
+
+def _v6_spacing(con):
+    """Step 8c: line spacing and the space after each paragraph, per template. Every template gets
+    1.15 and a small space (close to Word). Issued documents are not touched: they keep the spacing
+    they were printed with (see documents.snapshot_look)."""
+    _add_column(con, "document_templates", "line_spacing",
+                "INTEGER NOT NULL DEFAULT 115 "
+                "CONSTRAINT ck_templates_line_spacing CHECK (line_spacing IN (100, 115, 150, 200))")
+    _add_column(con, "document_templates", "para_gap",
+                "VARCHAR NOT NULL DEFAULT 'small' "
+                "CONSTRAINT ck_templates_para_gap CHECK (para_gap IN ('none', 'small', 'normal'))")
+
+MIGRATIONS = [_v1_counters_and_indexes, _v2_documents_settings_address, _v3_legacy_logo_flag, _v4_wording_options,
+              _v5_pictures_and_design, _v6_spacing]
 LATEST = len(MIGRATIONS)
 
 def _has_table(db_file, name):

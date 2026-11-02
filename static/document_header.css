@@ -1,20 +1,33 @@
-/* The header at the top of every printed page, and of the preview on the Settings page.
-   Three columns: left logo | centred text | right logos. The middle column is always centred
-   on the page, whether or not a logo is present. */
-.doc-head {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    align-items: center;
-    grid-template-areas: "left title right";
-    gap: 16px;
-    padding-bottom: 12px;
+/* The header at the top of every printed page, and of the previews (step 8c layout):
+
+     (logo)      Republic of the Philippines      (logo)(logo)
+                   SANTIAGO CITY, ISABELA
+                       BARANGAY PATUL
+             OFFICE OF THE PUNONG BARANGAY          <- the office line, in its own colour
+   ___________________________________________________
+
+   The logos have one fixed size and never shrink: a long name wraps onto a second line instead.
+   Both logo columns are as wide as the wider side, so the name stays in the middle of the page. */
+.doc-head-box {
+    container-type: inline-size;   /* the width check below measures this box */
+    --logo-w: 90px;                /* the largest a logo may be */
+    --logo-h: 80px;
+    --side: var(--logo-w);         /* one logo on each side */
+    padding-bottom: 8px;
     border-bottom: 2px solid var(--navy, #1b2a4a);
 }
 
-/* The box around the header is what the width check below measures, so the layout follows the
-   space the header really has (the small preview, the wizard, the sheet of paper). */
-.doc-head-box {
-    container-type: inline-size;
+/* Two logos on the right: both sides make room for two, so the name stays centred */
+.doc-head-box:has(.doc-logos-right img:not([hidden]) + img:not([hidden])) {
+    --side: calc(var(--logo-w) * 2 + 8px);
+}
+
+.doc-head {
+    display: grid;
+    grid-template-columns: var(--side) minmax(0, 1fr) var(--side);
+    align-items: center;
+    grid-template-areas: "left title right";
+    gap: 12px;
 }
 
 .doc-head > .doc-logos:first-child { grid-area: left; }
@@ -24,8 +37,7 @@
 .doc-logos {
     display: flex;
     align-items: center;
-    gap: 10px;
-    min-width: 0;                  /* lets the logos shrink instead of running over the name */
+    gap: 8px;
 }
 
 .doc-logos-right {
@@ -33,13 +45,12 @@
 }
 
 .doc-logos img {
-    max-width: 130px;
-    max-height: 90px;
+    max-width: var(--logo-w);
+    max-height: var(--logo-h);
     width: auto;
     height: auto;
     object-fit: contain;
-    min-width: 0;
-    flex: 0 1 auto;
+    flex: 0 0 auto;                /* never shrinks */
 }
 
 .doc-logos img[hidden] {
@@ -48,18 +59,27 @@
 
 .doc-title {
     text-align: center;
+    min-width: 0;
+    overflow-wrap: break-word;     /* a very long name wraps instead of pushing the logos */
 }
 
-.doc-title p:empty {
-    display: none;                 /* an empty header line takes no space */
+.doc-title p:empty,
+.doc-office:empty {
+    display: none;                 /* an empty line takes no space */
 }
 
 .doc-line1 {
     margin: 0;
     font-size: 13px;
-    font-weight: 700;
-    letter-spacing: .04em;
-    color: var(--orange, #e87722);
+    color: var(--navy, #1b2a4a);
+}
+
+.doc-place {
+    margin: 2px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    color: var(--navy, #1b2a4a);
 }
 
 .doc-name {
@@ -69,10 +89,15 @@
     color: var(--navy, #1b2a4a);
 }
 
-.doc-line2 {
-    margin: 2px 0 0;
-    font-size: 12px;
-    color: var(--muted, #6b7690);
+/* The office line: the same size as the barangay name, below the logos, just above the rule */
+.doc-office {
+    margin: 8px 0 0;
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: .02em;
+    text-align: center;
+    color: var(--office-color, #c62828);
 }
 
 /* Not enough room for three columns: the logos sit together in one centred row, the name goes underneath. */
@@ -85,6 +110,6 @@
     }
     .doc-head > .doc-logos { flex: 0 1 auto; }
     .doc-head > .doc-title { flex: 1 0 100%; order: 2; }
-    .doc-logos img { max-width: 78px; max-height: 62px; }
-    .doc-name { font-size: 17px; }
+    .doc-head-box { --logo-w: 70px; --logo-h: 62px; }
+    .doc-name, .doc-office { font-size: 17px; }
 }

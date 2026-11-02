@@ -3,16 +3,14 @@
 This file has no web code, so it can be tested on its own. Settings live in the key-value
 `settings` table; a key that is missing means "use DEFAULTS".
 """
-import io
-import os
-import time
+import re
 from pathlib import Path
 
-from PIL import Image, ImageOps
+import pictures
 
 from app_logging import log
 from database import SessionLocal, Setting
-from paths import data_path, resource_path
+from paths import resource_path
 
 # ---------------------------------------------------------------- settings keys and defaults
 DEFAULTS = {
@@ -22,10 +20,11 @@ DEFAULTS = {
     "province": "",
     "header_line_1": "Republic of the Philippines",
     "header_line_2": "",
+    "office_color": "#C62828",    # the colour of the office line (header_line_2), step 8c
     # Logos: the number is a version stamp; empty means "no logo in this slot"
-    "logo_left_v": "",
-    "logo_right_v": "",
-    "logo_third_v": "",
+    "logo_left_pic": "",          # the number of the picture in the pictures table ("" = no logo)
+    "logo_right_pic": "",
+    "logo_third_pic": "",
     # Signatories
     "signatory_captain_name": "",
     "signatory_captain_title": "Barangay Captain",
@@ -39,6 +38,7 @@ DEFAULTS = {
     "wizard_step": "profile",     # where the first-run wizard resumes: profile / logos / signatories / finish
     "wizard_later": "", 
 }
+
 
 def format_control_number(style: str, prefix: str, year: int, number: int) -> str:
     """BC + 2026 + 7 -> 'BC-2026-0007' (the style decides the order and the digits). Used from step 5."""
@@ -72,10 +72,26 @@ def save_settings(values: dict) -> None:
 
 
 # ---------------------------------------------------------------- checking what was typed
+# The colour of the office line ("OFFICE OF THE PUNONG BARANGAY"): a few ready choices, or any colour
+OFFICE_COLORS = {"#C62828": "Red", "#800000": "Maroon", "#1B2A4A": "Navy", "#1565C0": "Blue",
+                 "#2E7D32": "Green", "#111111": "Black"}
+_COLOR = re.compile(r"#[0-9A-F]{6}")
+
+
+def clean_color(text: str) -> str:
+    """'#c62828' -> '#C62828'; anything that is not a colour -> '' (refused by validate_profile)."""
+    value = (text or "").strip().upper()
+    return value if _COLOR.fullmatch(value) else ""
+
+
 def validate_profile(v: dict) -> str | None:
     required = (("barangay_name", "Barangay name"), ("municipality", "Municipality or city"), ("province", "Province"))
     missing = [label for key, label in required if not v.get(key)]
-    return ("Please fill in: " + ", ".join(missing) + ".") if missing else None
+    if missing:
+        return "Please fill in: " + ", ".join(missing) + "."
+    if "office_color" in v and not _COLOR.fullmatch(v["office_color"]):
+        return "Please choose a colour for the office line."
+    return None
 
 
 def validate_signatories(v: dict, require_names: bool = False) -> str | None:
@@ -95,7 +111,6 @@ def validate_documents(v: dict) -> str | None:
 LOGO_SLOTS = ("left", "right", "third")
 LOGO_LABELS = {"left": "Left logo", "right": "Right logo", "third": "Third logo"}
 MAX_LOGO_BYTES = 2 * 1024 * 1024        # about 2 MB
-MAX_LOGO_PIXELS = 25_000_000            # refuses "decompression bombs" (tiny file, enormous picture)
 LOGO_MAX_SIDE = 600                     # pixels on the longest side
 
 
@@ -103,44 +118,27 @@ class LogoError(Exception):
     """The message is written for the secretary and is safe to show as it is."""
 
 
-def logo_path(slot: str) -> Path:
-    return Path(data_path(f"logo_{slot}.png"))      # fixed names: the uploaded file name is never used
-
-
-def _new_version() -> str:
-    return str(time.time_ns() // 1_000_000)         # milliseconds: two saves never share a version
-
-
-def process_logo(raw: bytes) -> bytes:
-    """Check an uploaded picture and return it as a small PNG. Raises LogoError with a friendly message."""
-    if len(raw) > MAX_LOGO_BYTES:
-        raise LogoError("That picture is larger than 2 MB. Please choose a smaller one.")
+def process_logo(raw: bytes):
+    """Check an uploaded picture and return (png, width, height), small and see-through where it was.
+    Raises LogoError with a friendly message."""
     try:
-        img = Image.open(io.BytesIO(raw), formats=["PNG", "JPEG", "WEBP"])
-        if img.width * img.height > MAX_LOGO_PIXELS:
-            raise LogoError("That picture is too large. Please choose a smaller one.")
-        img = ImageOps.exif_transpose(img)          # undo the phone's rotation
-        img = img.convert("RGBA")                   # keeps see-through backgrounds
-        img.thumbnail((LOGO_MAX_SIDE, LOGO_MAX_SIDE))   # only ever shrinks
-        out = io.BytesIO()
-        img.save(out, format="PNG", optimize=True)
-        return out.getvalue()
-    except LogoError:
-        raise
-    except Exception as e:
-        raise LogoError("That file could not be read as a picture. Please choose a PNG or JPG file.") from e
+        png, _, width, height = pictures.prepare(raw, max_bytes=MAX_LOGO_BYTES, max_side=LOGO_MAX_SIDE, force_png=True)
+    except pictures.PictureError as e:
+        raise LogoError(str(e)) from None
+    return png, width, height
 
 
-def write_logo(slot: str, png: bytes) -> None:
-    target = logo_path(slot)
-    tmp = target.with_suffix(".tmp")
-    tmp.write_bytes(png)
-    os.replace(tmp, target)                         # atomic: never leaves a half-written logo
+def logo_picture_id(slot: str, values: dict | None = None):
+    """The picture number of a logo slot, or None when the slot is empty."""
+    v = load_settings() if values is None else values
+    text = v.get(f"logo_{slot}_pic", "")
+    return int(text) if text.isdigit() else None
 
 
 def apply_logo_changes(uploads: dict, removals: set) -> list:
     """uploads: {slot: raw bytes}; removals: slots to empty. All or nothing: if ANY picture is
-    rejected, nothing is changed. Returns a readable list of what changed (for the audit log)."""
+    rejected, nothing is changed. Returns a readable list of what changed (for the audit log).
+    The pictures are kept inside the database (see pictures.py), so backups include them."""
     ready = {}
     for slot, raw in uploads.items():
         try:
@@ -148,25 +146,23 @@ def apply_logo_changes(uploads: dict, removals: set) -> list:
         except LogoError as e:
             raise LogoError(f"{LOGO_LABELS[slot]}: {e}") from None
 
-    versions, changes = {}, []
-    for slot, png in ready.items():
-        changes.append(f"{LOGO_LABELS[slot]} {'replaced' if logo_path(slot).exists() else 'added'}")
-        write_logo(slot, png)
-        versions[f"logo_{slot}_v"] = _new_version()
+    values = load_settings()
+    new, changes = {}, []
+    for slot, (png, width, height) in ready.items():
+        changes.append(f"{LOGO_LABELS[slot]} {'replaced' if logo_picture_id(slot, values) else 'added'}")
+        new[f"logo_{slot}_pic"] = str(pictures.store(png, "image/png", width, height))
     for slot in sorted(removals - set(ready)):      # a new picture wins over "Remove"
-        if logo_path(slot).exists():
-            logo_path(slot).unlink()
-            versions[f"logo_{slot}_v"] = ""
+        if logo_picture_id(slot, values):
+            new[f"logo_{slot}_pic"] = ""
             changes.append(f"{LOGO_LABELS[slot]} removed")
-    if versions:
-        save_settings(versions)
+    if new:
+        save_settings(new)
     return changes
 
 def _logo_url(slot: str, values: dict) -> str | None:
-    version = values.get(f"logo_{slot}_v")
-    if version and logo_path(slot).exists():
-        return f"/branding/{slot}.png?v={version}"  # ?v= makes the browser load a replaced logo at once
-    return None
+    picture_id = logo_picture_id(slot, values)
+    # ?v= changes with every new picture, so the browser shows a replaced logo at once
+    return f"/branding/{slot}.png?v={picture_id}" if picture_id else None
 
 
 def logo_info(values: dict) -> dict:
@@ -192,11 +188,11 @@ def seed_legacy_logos() -> None:
         versions = {"legacy_logos_pending": "0"}
         for slot, relative in LEGACY_LOGOS.items():
             source = Path(resource_path(relative))
-            if logo_path(slot).exists() or not source.exists():
+            if logo_picture_id(slot, values) or not source.exists():
                 continue
             try:
-                write_logo(slot, process_logo(source.read_bytes()))
-                versions[f"logo_{slot}_v"] = _new_version()
+                png, width, height = process_logo(source.read_bytes())
+                versions[f"logo_{slot}_pic"] = str(pictures.store(png, "image/png", width, height))
             except Exception:
                 log.exception("Could not copy the old %s logo", slot)
         save_settings(versions)
@@ -210,7 +206,10 @@ def get_branding(values: dict | None = None) -> dict:
     parts = [v["barangay_name"], v["municipality"], v["province"]]
     return {
         "full_name": ", ".join(p for p in parts if p) or "Barangay name not set",
-        "name": v["barangay_name"],
+        "name": v["barangay_name"] or "Barangay name not set",
+        # The header's second line (step 8c): "Municipality or city, Province", as typed in Settings
+        "place": ", ".join(p for p in (v["municipality"], v["province"]) if p),
+        "office_color": v["office_color"] if _COLOR.fullmatch(v["office_color"] or "") else DEFAULTS["office_color"],
         "municipality": v["municipality"],
         "province": v["province"],
         "header_line_1": v["header_line_1"],
