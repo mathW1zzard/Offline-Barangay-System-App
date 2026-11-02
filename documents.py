@@ -159,7 +159,20 @@ DEFAULT_FONT = 21
 LINE_SPACINGS = {100: "1.0", 115: "1.15", 150: "1.5", 200: "2.0"}
 PARA_GAPS = {"none": ("None", 0.0), "small": ("Small", 0.5), "normal": ("Normal", 1.0)}   # label, size in em
 # How documents issued before step 8c were spaced: their reprints keep it
-OLD_LOOK = {"line": 1.85, "gap": 1.15, "indent": True}
+OLD_LOOK = {"line": 1.85, "gap": 1.15, "indent": True, "sign": None}
+# Space above the signatures (step 8d), in mm: from the last line of the wording to the signer's
+# name. About 10 mm of it is the room to sign with a pen, so it never goes below 12.
+SIGN_MM = (12, 40)
+DEFAULT_SIGN_MM = 27
+SIGN_ROOM_MM = 10
+
+
+def parse_sign_space(text: str) -> int:
+    value = (text or "").strip()
+    low, high = SIGN_MM
+    if not value.isdigit() or not low <= int(value) <= high:
+        raise ValueError(f"The space above the signatures must be a number from {low} to {high} mm.")
+    return int(value)
 
 
 def parse_spacing(line_spacing: str, para_gap: str):
@@ -170,9 +183,11 @@ def parse_spacing(line_spacing: str, para_gap: str):
     return int(text), para_gap
 
 
-def look(font_half_pt: int, line_spacing: int, para_gap: str) -> dict:
-    """How the wording is spaced on paper: text size (half points), line height, paragraph gap (em)."""
-    return {"pt": font_half_pt, "line": line_spacing / 100, "gap": PARA_GAPS[para_gap][1], "indent": False}
+def look(font_half_pt: int, line_spacing: int, para_gap: str, sign_mm: int = DEFAULT_SIGN_MM) -> dict:
+    """How the wording is spaced on paper: text size (half points), line height, paragraph gap (em),
+    and the space above the signatures (mm)."""
+    return {"pt": font_half_pt, "line": line_spacing / 100, "gap": PARA_GAPS[para_gap][1], "indent": False,
+            "sign": sign_mm}
 
 
 def parse_font(text: str) -> int:
@@ -290,7 +305,8 @@ def make_snapshot(branding: dict, print_fee: bool, *, signers: str = "both", des
     text_look = text_look or look(DEFAULT_FONT, 115, "small")
     return {**{k: branding[k] for k in keys}, "print_fee": bool(print_fee), "signers": signers,
             "auto_indent": False, "number_in_text": True, "design": design,
-            "font_half_pt": text_look["pt"], "line": text_look["line"], "gap": text_look["gap"]}
+            "font_half_pt": text_look["pt"], "line": text_look["line"], "gap": text_look["gap"],
+            "sign_mm": text_look.get("sign")}
 
 
 def snapshot_look(snapshot: dict) -> dict:
@@ -298,7 +314,7 @@ def snapshot_look(snapshot: dict) -> dict:
     indent, if the template had it)."""
     if "line" in snapshot:
         return {"pt": snapshot.get("font_half_pt", DEFAULT_FONT), "line": snapshot["line"], "gap": snapshot["gap"],
-                "indent": False}
+                "indent": False, "sign": snapshot.get("sign_mm")}         # before step 8d: None = as before
     return {**OLD_LOOK, "pt": snapshot.get("font_half_pt", DEFAULT_FONT), "indent": snapshot.get("auto_indent", True)}
 
 

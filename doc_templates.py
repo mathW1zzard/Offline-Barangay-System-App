@@ -106,17 +106,32 @@ def validate_body(body: str, available) -> str | None:
     return None
 
 # ---------------------------------------------------------------- from text to paragraphs
+MAX_EXTRA_LINES = 5                     # empty lines kept between two paragraphs (more are dropped)
+
+
 def normalize_body(text: str) -> str:
-    """One newline style, no trailing spaces, at most one blank line in a row. A Tab at the very
-    start is kept (it is an indent the secretary typed), so only newlines and spaces are trimmed."""
+    """One newline style, no trailing spaces, at most MAX_EXTRA_LINES extra empty lines in a row. A Tab
+    at the very start is kept (it is an indent the secretary typed), so only newlines and spaces are
+    trimmed."""
     text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
     text = "\n".join(line.rstrip() for line in text.split("\n"))
-    return re.sub(r"\n{3,}", "\n\n", text).strip("\n ")
+    most = MAX_EXTRA_LINES + 2
+    return re.sub(r"\n{%d,}" % (most + 1), "\n" * most, text).strip("\n ")
 
 
 def _paragraph_chunks(body: str) -> list:
-    """A blank line starts a new paragraph."""
-    return [c for c in re.split(r"\n[ \t]*\n", normalize_body(body)) if c.strip()]
+    """A blank line starts a new paragraph. Each EXTRA blank line (step 8c) is an empty line of space,
+    kept as a line break at the start of the next paragraph, so pressing Enter once more after
+    "TO WHOM IT MAY CONCERN:" makes the space after it one line bigger."""
+    chunks, extra = [], 0
+    for chunk in re.split(r"\n[ \t]*\n", normalize_body(body)):
+        if not chunk.strip():
+            extra += 1                      # "\n\n\n\n" splits into "", ...: one empty piece per extra line pair
+            continue
+        lead = len(chunk) - len(chunk.lstrip("\n"))   # an odd extra blank line stays as a leading newline
+        chunks.append("\n" * (2 * extra + lead) + chunk.lstrip("\n") if extra or lead else chunk)
+        extra = 0
+    return chunks
 
 
 def _flatten(chunk: str) -> str:

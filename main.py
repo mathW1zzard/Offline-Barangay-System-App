@@ -2302,11 +2302,12 @@ def editor_values(row) -> dict:
             "extras": [e for e in row.extras.split(",") if e], "print_fee": bool(row.print_fee),
             "auto_bold": bool(row.auto_bold), "signers": row.signers,
             "design": design_of(row), "font_half_pt": row.font_half_pt,
-            "line_spacing": row.line_spacing, "para_gap": row.para_gap}
+            "line_spacing": row.line_spacing, "para_gap": row.para_gap, "sign_space_mm": row.sign_space_mm}
 
 def look_of(row) -> dict:
-    """How a template's wording is spaced (step 8c). The automatic indent is gone: indents come from Tab."""
-    return documents.look(row.font_half_pt, row.line_spacing, row.para_gap)
+    """How a template's wording is spaced (step 8c), and the space above the signatures (step 8d).
+    The automatic indent is gone: indents come from Tab."""
+    return documents.look(row.font_half_pt, row.line_spacing, row.para_gap, row.sign_space_mm)
 
 def design_of(row):
     """The design of a template (a dict), or None for a plain page. It was checked when it was saved."""
@@ -2346,12 +2347,13 @@ def render_template_editor(request: Request, row, form: dict | None = None, erro
         "designs": designs, "design_mm": documents.DESIGN_MM, "layers": documents.LAYERS,
         "font_sizes": documents.FONT_SIZES, "print_design": documents.for_print(shown["design"]),
         "line_spacings": documents.LINE_SPACINGS, "para_gaps": documents.PARA_GAPS,
-        "look": documents.look(shown["font_half_pt"], shown["line_spacing"], shown["para_gap"]),
+        "look": documents.look(shown["font_half_pt"], shown["line_spacing"], shown["para_gap"], shown["sign_space_mm"]),
+        "sign_mm": documents.SIGN_MM,
     }, status_code=status_code)
 
 def read_template_form(db, template_id, name, body, code_prefix, default_fee, use_validity, validity_months, extras,
                        print_fee, auto_bold, signers, design_text: str, font_half_pt: str, line_spacing: str,
-                       para_gap: str):
+                       para_gap: str, sign_space_mm: str):
     """Returns (values to save, what she typed, error). Exactly one of values / error is None."""
     typed = {"name": clean_text(name, 60), "body": doc_templates.normalize_body(body),
              "code_prefix": code_prefix.strip().upper(), "default_fee": default_fee.strip(),
@@ -2360,6 +2362,9 @@ def read_template_form(db, template_id, name, body, code_prefix, default_fee, us
              "auto_bold": auto_bold == "1",
              "line_spacing": int(line_spacing) if line_spacing.strip().isdigit() and int(line_spacing) in documents.LINE_SPACINGS else 115,
              "para_gap": para_gap if para_gap in documents.PARA_GAPS else "small",
+             "sign_space_mm": (int(sign_space_mm) if sign_space_mm.strip().isdigit()
+                               and documents.SIGN_MM[0] <= int(sign_space_mm) <= documents.SIGN_MM[1]
+                               else documents.DEFAULT_SIGN_MM),
              "signers": signers if signers in doc_templates.SIGNER_CHOICES else "both",
              "design": None, "font_half_pt": documents.DEFAULT_FONT}
     try:                                                       # shown again as it was if the save fails
@@ -2378,6 +2383,7 @@ def read_template_form(db, template_id, name, body, code_prefix, default_fee, us
             raise ValueError("A picture of the design could not be found. Please load the design again.")
         font = documents.parse_font(font_half_pt)
         spacing = documents.parse_spacing(line_spacing, para_gap)
+        sign_space = documents.parse_sign_space(sign_space_mm)
         prefix = doc_templates.parse_prefix(typed["code_prefix"])
         fee = doc_templates.parse_fee(typed["default_fee"])
         months = doc_templates.parse_months(typed["validity_months"]) if typed["use_validity"] else None
@@ -2390,7 +2396,8 @@ def read_template_form(db, template_id, name, body, code_prefix, default_fee, us
     return {"name": typed["name"], "body": typed["body"], "code_prefix": prefix, "default_fee_centavos": fee,
             "validity_months": months, "extras": ",".join(typed["extras"]), "print_fee": typed["print_fee"],
             "auto_bold": typed["auto_bold"], "signers": typed["signers"],
-            "design": design, "font_half_pt": font, "line_spacing": spacing[0], "para_gap": spacing[1]}, typed, None
+            "design": design, "font_half_pt": font, "line_spacing": spacing[0], "para_gap": spacing[1],
+            "sign_space_mm": sign_space}, typed, None
 
 @app.get("/documents/templates/{template_id}/edit", dependencies=[Depends(admin_required)])
 def edit_template_page(request: Request, template_id: int):
@@ -2406,14 +2413,15 @@ def save_template(request: Request, template_id: int, name: str = Form(""), body
                   validity_months: str = Form(""), extras: list[str] = Form(default=[]), print_fee: str = Form(""),
                   auto_bold: str = Form(""), signers: str = Form("both"),
                   design: str = Form(""), font_half_pt: str = Form("21"), line_spacing: str = Form("115"),
-                  para_gap: str = Form("small")):
+                  para_gap: str = Form("small"), sign_space_mm: str = Form("27")):
     with SessionLocal() as db:
         row = db.get(DocumentTemplate, template_id)
         if row is None:
             return RedirectResponse(url="/documents/templates", status_code=303)
         values, typed, error = read_template_form(db, row.id, name, body, code_prefix, default_fee,
                                                   use_validity, validity_months, extras, print_fee,
-                                                  auto_bold, signers, design, font_half_pt, line_spacing, para_gap)
+                                                  auto_bold, signers, design, font_half_pt, line_spacing, para_gap,
+                                                  sign_space_mm)
         if error:
             return render_template_editor(request, row, form=typed, error=error, status_code=400)
 
@@ -2440,6 +2448,8 @@ def save_template(request: Request, template_id: int, name: str = Form(""), body
                            f'{documents.LINE_SPACINGS[values["line_spacing"]]}')
         if row.para_gap != values["para_gap"]:
             changes.append(f'space after paragraphs {documents.PARA_GAPS[values["para_gap"]][0].lower()}')
+        if row.sign_space_mm != values["sign_space_mm"]:
+            changes.append(f'space above signatures {row.sign_space_mm} -> {values["sign_space_mm"]} mm')
         if row.signers != values["signers"]:
             changes.append(f'signed by {row.signers} -> {values["signers"]}')
         design_changed = documents.design_changes(design_of(row), values["design"])
@@ -2458,6 +2468,7 @@ def save_template(request: Request, template_id: int, name: str = Form(""), body
         row.extras, row.print_fee = values["extras"], values["print_fee"]
         row.auto_bold, row.signers = values["auto_bold"], values["signers"]
         row.line_spacing, row.para_gap = values["line_spacing"], values["para_gap"]
+        row.sign_space_mm = values["sign_space_mm"]
         row.design_json = documents.to_json(values["design"]) if values["design"] else None
         row.font_half_pt = values["font_half_pt"]
         db.commit()
@@ -2539,7 +2550,7 @@ def duplicate_template(request: Request, template_id: int):
             code_prefix=row.code_prefix, extras=row.extras, default_fee_centavos=row.default_fee_centavos,
             validity_months=row.validity_months, print_fee=row.print_fee, is_active=True,
             auto_bold=row.auto_bold, auto_indent=row.auto_indent, signers=row.signers,
-            line_spacing=row.line_spacing, para_gap=row.para_gap)
+            line_spacing=row.line_spacing, para_gap=row.para_gap, sign_space_mm=row.sign_space_mm)
         copy.design_json, copy.font_half_pt = row.design_json, row.font_half_pt
         db.add(copy)
         db.commit()

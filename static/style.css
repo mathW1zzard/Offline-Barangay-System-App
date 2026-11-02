@@ -2434,6 +2434,7 @@ fieldset.field legend {
     margin-top: 12px;
 }
 
+.sign-space input[type="range"],
 .design-box input[type="range"] {
     width: 100%;
     accent-color: var(--orange);

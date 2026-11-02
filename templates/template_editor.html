@@ -50,6 +50,7 @@
                 </div>
                 <textarea name="body" id="body" rows="16" spellcheck="true">{{ shown.body }}</textarea>
                 <p class="hint">Press Enter for a new line, and Enter twice for a new paragraph (with a space before it).
+                    Press Enter once more for each extra empty line, for example after "TO WHOM IT MAY CONCERN:".
                     A field such as {Client name} is replaced when the document is printed. Words between two pairs of
                     asterisks, like **THIS IS TO CERTIFY**, print in bold. A line starting with &gt;&gt; is centred, and with
                     &gt;&gt;&gt; it goes on the right. Use the buttons above so the field names are spelled correctly.</p>
@@ -101,6 +102,13 @@
                         <option value="{{ key }}"{% if shown.para_gap == key %} selected{% endif %}>{{ label }}</option>
                         {% endfor %}
                     </select>
+                </div>
+                <div class="field sign-space">
+                    <label for="sign_space_mm">Space above the signatures: <output id="sign-mm-out">{{ shown.sign_space_mm }}</output> mm</label>
+                    <input type="range" name="sign_space_mm" id="sign_space_mm" min="{{ sign_mm[0] }}" max="{{ sign_mm[1] }}"
+                        step="1" value="{{ shown.sign_space_mm }}">
+                    <p class="hint">From the last line of the wording to the signer's name. It always keeps about 10 mm of
+                        room to sign with a pen. 27 mm is the usual space.</p>
                 </div>
                 <label class="check-row check-compact">
                     <input type="checkbox" name="auto_bold" value="1" id="auto_bold"{% if shown.auto_bold %} checked{% endif %}>
@@ -454,6 +462,8 @@
         window.applyCertDesign(sheet, design, fontBox.value);
         sheet.style.setProperty('--cert-line', Number($('#line_spacing').value) / 100);
         sheet.style.setProperty('--cert-gap', PARA_GAPS[$('#para_gap').value][1] + 'em');
+        sheet.style.setProperty('--cert-sign-gap', (Number($('#sign_space_mm').value) - 10) + 'mm');
+        $('#sign-mm-out').textContent = $('#sign_space_mm').value;
         if (design) {
             $('#top-mm-out').textContent = design.top_mm;
             $('#bottom-mm-out').textContent = design.bottom_mm;

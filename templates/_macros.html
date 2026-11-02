@@ -233,7 +233,7 @@ page script can fill it in. -#}
    |float and |int keep the style to plain numbers. -#}
 {% macro cert_open(d, lk, id='') -%}
 <div class="cert"{% if id %} id="{{ id }}"{% endif %}
-    style="--cert-w: {{ d.page_w|float }}mm; --cert-h: {{ d.page_h|float }}mm; --cert-top: {{ d.top_mm|int }}mm; --cert-bottom: {{ d.bottom_mm|int }}mm; --cert-left: {{ d.left_mm|float }}mm; --cert-right: {{ d.right_mm|float }}mm; --cert-pt: {{ lk.pt|int / 2 }}pt; --cert-line: {{ lk.line|float }}; --cert-gap: {{ lk.gap|float }}em">
+    style="--cert-w: {{ d.page_w|float }}mm; --cert-h: {{ d.page_h|float }}mm; --cert-top: {{ d.top_mm|int }}mm; --cert-bottom: {{ d.bottom_mm|int }}mm; --cert-left: {{ d.left_mm|float }}mm; --cert-right: {{ d.right_mm|float }}mm; --cert-pt: {{ lk.pt|int / 2 }}pt; --cert-line: {{ lk.line|float }}; --cert-gap: {{ lk.gap|float }}em{% if lk.sign %}; --cert-sign-gap: {{ lk.sign|int - 10 }}mm{% endif %}">
 {%- endmacro %}
 
 {#- The wording of a document: paragraphs, each made of lines (left, centred or on the right). Each

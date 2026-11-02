@@ -138,6 +138,8 @@ class DocumentTemplate(Base):
         # Added in migration v6 (step 8c): spacing of the wording
         CheckConstraint("line_spacing IN (100, 115, 150, 200)", name="ck_templates_line_spacing"),
         CheckConstraint("para_gap IN ('none', 'small', 'normal')", name="ck_templates_para_gap"),
+        # Added in migration v7 (step 8d): space above the signatures
+        CheckConstraint("sign_space_mm BETWEEN 12 AND 40", name="ck_templates_sign_space_mm"),
     )
 
     id = Column(Integer, primary_key=True)
@@ -163,6 +165,9 @@ class DocumentTemplate(Base):
     # space after each paragraph.
     line_spacing = Column(Integer, nullable=False, default=115, server_default="115")
     para_gap = Column(String, nullable=False, default="small", server_default="small")
+    # Added in migration v7 (step 8d): mm from the last line of the wording to the signer's name,
+    # including about 10 mm of room to sign with a pen. 27 is how it printed so far.
+    sign_space_mm = Column(Integer, nullable=False, default=27, server_default="27")
     
 class IssuedDocument(Base):
     """One printed document. Everything is a plain copy so history survives edited templates,
@@ -455,8 +460,15 @@ def _v6_spacing(con):
                 "VARCHAR NOT NULL DEFAULT 'small' "
                 "CONSTRAINT ck_templates_para_gap CHECK (para_gap IN ('none', 'small', 'normal'))")
 
+def _v7_sign_space(con):
+    """Step 8d: the space above the signatures, per template. Every template gets 27 mm, the space
+    used so far. Issued documents are not touched."""
+    _add_column(con, "document_templates", "sign_space_mm",
+                "INTEGER NOT NULL DEFAULT 27 "
+                "CONSTRAINT ck_templates_sign_space_mm CHECK (sign_space_mm BETWEEN 12 AND 40)")
+
 MIGRATIONS = [_v1_counters_and_indexes, _v2_documents_settings_address, _v3_legacy_logo_flag, _v4_wording_options,
-              _v5_pictures_and_design, _v6_spacing]
+              _v5_pictures_and_design, _v6_spacing, _v7_sign_space]
 LATEST = len(MIGRATIONS)
 
 def _has_table(db_file, name):

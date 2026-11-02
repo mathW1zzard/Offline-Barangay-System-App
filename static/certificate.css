@@ -111,6 +111,11 @@
     text-align: right;
 }
 
+/* An empty line (Enter pressed once more): one line of space */
+.cert .body .ln:empty::after {
+    content: "\00a0";
+}
+
 /* Templates with "Indent the first line automatically" turned off */
 .cert .body.no-indent p {
     text-indent: 0;
@@ -132,7 +137,8 @@
     display: flex;
     justify-content: space-between;
     gap: 40px;
-    margin-top: 64px;
+    margin-top: var(--cert-sign-gap, 64px);   /* + the 38px (10 mm) room to sign above the name = the space
+                                                 above the signatures (step 8d); 64px = as before */
     break-inside: avoid;
 }
 
