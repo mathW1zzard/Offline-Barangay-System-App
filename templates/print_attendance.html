@@ -138,10 +138,15 @@
             border-bottom: 1px solid var(--line);
         }
 
-        td .addr {
-            display: block;
-            font-size: 11px;
-            color: #6b7690;
+        /* The client's address: its own column (step 8e), wrapping onto a second line when long */
+        td.addr {
+            max-width: 160px;
+            overflow-wrap: anywhere;
+        }
+
+        /* Times stay on one line, so the address gets the room */
+        td.nowrap {
+            white-space: nowrap;
         }
 
         td.muted {
@@ -287,6 +292,7 @@
                     <th>No.</th>
                     <th>Ticket#</th>
                     <th>Client Name</th>
+                    <th>Address</th>
                     <th>Type</th>
                     <th>Service</th>
                     <th>Time In</th>
@@ -299,19 +305,19 @@
                 <tr>
                     <td class="muted">{{ loop.index }}</td>
                     <td><strong>{{ v.ticket_number }}</strong></td>
-                    <td><strong>{{ v.citizen_name }}</strong>{% if v.address %}<span class="addr">{{ v.address
-                            }}</span>{% endif %}</td>
+                    <td><strong>{{ v.citizen_name }}</strong></td>
+                    <td class="addr">{{ v.address or '--' }}</td>
                     <td class="muted">{% if v.lane == "P" %}Priority{% else %}Regular{% endif %}</td>
                     <td class="muted">{{ v.service_label }}</td>
-                    <td class="muted">{{ v.called_at.strftime('%I:%M %p') if v.called_at else '--' }}</td>
-                    <td class="muted">{{ v.completed_at.strftime('%I:%M %p') if v.completed_at else '--' }}</td>
+                    <td class="muted nowrap">{{ v.called_at.strftime('%I:%M %p') if v.called_at else '--' }}</td>
+                    <td class="muted nowrap">{{ v.completed_at.strftime('%I:%M %p') if v.completed_at else '--' }}</td>
                     <td class="st-{{ v.final_status }}">
                         {{ 'No-Show' if v.final_status == 'no_show' else 'Completed' }}
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8" class="empty">No records match these filters.</td>
+                    <td colspan="9" class="empty">No records match these filters.</td>
                 </tr>
                 {% endfor %}
             </tbody>

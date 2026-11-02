@@ -1150,6 +1150,8 @@ def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = 
     
     if not name:
         return render_registration(request, "Client name is required.", form, 400)
+    if not addr:                                   # required since step 8e; still never printed on the queue slip
+        return render_registration(request, "Please enter the client's address (Purok / Street).", form, 400)
     if lane not in ("P", "R"):
         return render_registration(request, "Please choose Priority or Regular.", form, 400)
     if sid is None:
@@ -2732,7 +2734,8 @@ def issue_form(request: Request, template_id: int, client_name: str = "", addres
         form = {"client_name": carry.get("client_name", ""), "address": carry.get("address", ""), "purpose": "",
                 "issue_date": date.today().isoformat(), "age": "", "civil_status": "",
                 "nationality": documents.DEFAULT_NATIONALITY, "years": "",
-                "ctc_number": "", "ctc_place": "", "ctc_date": "",
+                # The CTC "Issued on" starts on today's date (step 8e); she clears it if the client has no CTC
+                "ctc_number": "", "ctc_place": "", "ctc_date": date.today().isoformat(),
                 "fee": doc_templates.format_fee_input(row.default_fee_centavos), "or_choice": "", "or_number": "",
                 "signers": row.signers}
         if original:                                 # a corrected copy starts from the voided one (dated today)

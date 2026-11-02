@@ -108,8 +108,9 @@
                         <input type="date" name="ctc_date" id="ctc_date" value="{{ shown.ctc_date }}" max="{{ today }}">
                     </div>
                 </div>
-                <p class="hint">Copy these from the client's cedula. If the client has none, leave them empty: a blank line
-                    prints, to be filled in by hand. The date prints like 12/31/2025.</p>
+                <p class="hint">Copy these from the client's cedula. "Issued on" starts on today's date: change it if the
+                    cedula is from another day. If the client has no CTC, leave the boxes empty and clear the date: a blank
+                    line prints, to be filled in by hand. The date prints like 12/31/2025.</p>
             </fieldset>
             {% endif %}
 

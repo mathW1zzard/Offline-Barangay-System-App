@@ -28,9 +28,9 @@
             </div>
 
             <div class="field">
-                <label for="address">Address (Purok / Street) <span class="hint">(optional)</span></label>
+                <label for="address">Address (Purok / Street)</label>
                 <input type="text" name="address" id="address" value="{{ form.address if form else '' }}"
-                    maxlength="150" autocomplete="off">
+                    maxlength="150" autocomplete="off" required>
                 <p class="hint">Saved with the visit and used on documents. It is never printed on the queue slip or shown on the display.</p>
             </div>
 
