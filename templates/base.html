@@ -24,29 +24,48 @@
                 </div>
             </div>
 
+            {#- Grouped by how often the page is used: the front desk all day, records now and then,
+                setup rarely. A group heading is real information here, not decoration. -#}
             <nav class="nav" aria-label="Main">
                 {% set path = request.url.path %}
-                {% set nav_items = [
-                ('/dashboard', 'Dashboard', 'dashboard'),
+                {% set nav_groups = [
+                ('Front desk', [
                 ('/client_registration', 'Client Registration', 'user-plus'),
                 ('/queue_management', 'Queue Management', 'list'),
                 ('/documents', 'Documents', 'file-text'),
+                ('/dashboard', 'Dashboard', 'dashboard'),
+                ]),
+                ('Records', [
                 ('/attendance', 'Attendance', 'calendar'),
-                ('/services', 'Services', 'landmark'),
                 ('/audit_logs', 'Audit Logs', 'clipboard'),
+                ]),
+                ('Setup', [
+                ('/services', 'Services', 'landmark'),
                 ('/settings', 'Settings', 'sliders'),
                 ('/maintenance', 'Maintenance', 'database'),
                 ('/about', 'About', 'info'),
+                ]),
                 ] %}
-                {% for href, label, ico in nav_items %}
-                <a href="{{ href }}" class="nav-link{{ ' active' if path.startswith(href) }}" {% if
-                    path.startswith(href) %} aria-current="page" {% endif %}>
-                    {{ icon(ico, 20) }}<span>{{ label }}</span>
-                </a>
+                {% for group, items in nav_groups %}
+                <div class="nav-group">
+                    <p class="nav-heading">{{ group }}</p>
+                    {% for href, label, ico in items %}
+                    <a href="{{ href }}" class="nav-link{{ ' active' if path.startswith(href) }}" {% if
+                        path.startswith(href) %} aria-current="page" {% endif %}>
+                        {{ icon(ico, 20) }}<span>{{ label }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
                 {% endfor %}
-                <p class="footer bottom"> Copyright &#169; 2026 <strong>Soft-Tech Builders</strong>, All rights reserved
-                </p>
             </nav>
+
+            <div class="sidebar-foot">
+                <form action="/display/open" method="post" data-no-lock>
+                    <button type="submit" class="nav-link nav-button">{{ icon('monitor', 20) }}<span>Open display
+                            screen</span></button>
+                </form>
+                <p class="copyright">&#169; 2026 Soft-Tech Builders</p>
+            </div>
         </aside>
 
         <div class="main">
@@ -57,7 +76,12 @@
                     <p>{% block page_subtitle %}{% endblock %}</p>
                 </div>
                 <div class="topbar-right">
-                    <span class="queue-pill">Active Queue: <strong>{{ active_queue_today() }}</strong></span>
+                    {% set in_queue = active_queue_today() %}
+                    <a class="queue-pill{{ ' is-empty' if not in_queue }}" href="/queue_management"
+                        title="Waiting, called and skipped tickets today. Opens Queue Management.">
+                        <span class="dot{{ ' dot-pulse' if in_queue }}"></span>
+                        <strong>{{ in_queue }}</strong> in queue
+                    </a>
 
                     <div class="user-menu">
 
@@ -67,12 +91,6 @@
 
                         <div class="menu" id="user-menu" role="menu">
                             <a href="/change-password" role="menuitem">{{ icon('key', 18) }} Change password</a>
-
-                            <form action="/display/open" method="post" data-no-lock>
-                                <button type="submit" role="menuitem">{{ icon('list', 18) }} Open display
-                                    screen</button>
-                            </form>
-                            
                             <button type="button" role="menuitem" data-confirm data-action="/logout"
                                 data-title="Log out of your account?"
                                 data-message="You will be signed out and will need to enter your username and password again to use the system."
@@ -107,6 +125,9 @@
     </dialog>
 
     {% block dialogs %}{% endblock %}
+
+    <!-- Toasts: messages after an action appear here, so the page does not shift under the cursor. -->
+    <div class="toast-region" id="toast-region">{% block toasts %}{% endblock %}</div>
 
     <script src="/static/app.js"></script>
     {% block scripts %}{% endblock %}

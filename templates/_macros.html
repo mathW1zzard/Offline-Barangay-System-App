@@ -145,6 +145,16 @@
     <line x1="14" x2="14" y1="2" y2="6" />
     <line x1="8" x2="8" y1="10" y2="14" />
     <line x1="16" x2="16" y1="18" y2="22" />
+    {%- elif name == 'monitor' -%}
+    <rect width="20" height="14" x="2" y="3" rx="2" />
+    <line x1="8" x2="16" y1="21" y2="21" />
+    <line x1="12" x2="12" y1="17" y2="21" />
+    {%- elif name == 'x' -%}
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+    {%- elif name == 'clock' -%}
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
     {%- elif name == 'file-text' -%}
     <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
     <path d="M14 2v4a2 2 0 0 0 2 2h4" />
@@ -161,6 +171,27 @@
 <span class="badge badge-{{ key }}"><span class="dot{{ ' dot-pulse' if key in ('waiting', 'active') }}"></span>{{ label
     or (key.replace('_', ' ')|title) }}</span>
 {%- endmacro %}
+
+{#- A message after an action, shown as a toast (see base.html, app.js). Success fades on its own;
+   an error stays until it is closed, so it cannot be missed. -#}
+{% macro toast(message) -%}
+{%- if message -%}
+<div class="toast {{ 'toast-ok' if message.ok else 'toast-error' }}" role="{{ 'status' if message.ok else 'alert' }}"
+    {% if message.ok %}data-autohide{% endif %}>
+    {{ icon('check' if message.ok else 'alert', 20) }}
+    <p>{{ message.text }}</p>
+    <button type="button" class="toast-close" aria-label="Close message">{{ icon('x', 18) }}</button>
+</div>
+{%- endif -%}
+{%- endmacro %}
+
+{#- Elapsed time since dt, kept current by app.js. The server's text is the fallback. -#}
+{% macro since(dt, prefix='') -%}
+{%- if dt -%}<span class="since" data-since="{{ dt.strftime('%Y-%m-%dT%H:%M:%S') }}" data-prefix="{{ prefix }}">{{ prefix }}{{ dt.strftime('%I:%M %p') }}</span>{%- endif -%}
+{%- endmacro %}
+
+{#- A keyboard shortcut hint inside a button. -#}
+{% macro kbd(key) -%}<kbd class="kbd" aria-hidden="true">{{ key }}</kbd>{%- endmacro %}
 
 {% macro lane_tag(lane) -%}
 <span class="tag {{ 'tag-priority' if lane == 'P' else 'tag-regular' }}">{{ 'Priority' if lane == 'P' else 'Regular'

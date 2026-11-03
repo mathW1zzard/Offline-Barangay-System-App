@@ -1,41 +1,40 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, lane_tag %}
+{% from "_macros.html" import icon, lane_tag, badge %}
 {% block title %}Client Registration{% endblock %}
 {% block page_title %}Client Registration{% endblock %}
 {% block description %}To register a new ticket for resident{% endblock %}
 {% block page_subtitle %}New visitor{% endblock %}
-{% block head %}
-<style>
-    .confirm-summary { margin: 12px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; }
-    .confirm-summary dt { color: #64748b; }
-    .confirm-summary dd { margin: 0; font-weight: 600; word-break: break-word; }
-</style>
-{% endblock %}
 {% block content %}
 {% set active_services = services|selectattr('service_status', 'equalto', 'Active')|list %}
 
 <div class="reg-layout">
-    <section class="card form-card form-card-wide">
-        <h2>Client Ticket Dispenser</h2>
-        <p class="hint">Fill in the client's details and choose Priority or Regular lane.</p>
+    <section class="card reg-card" aria-labelledby="reg-title">
+        <div class="reg-head">
+            <h2 id="reg-title">New visitor</h2>
+            <p class="hint">Fill in the details and pick the lane. Press Enter to check them and issue the ticket.</p>
+        </div>
 
         {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
         <form action="/register" method="post" class="form" id="register-form" data-needs-confirm>
-            <div class="field">
-                <label for="citizen_name">Client full name</label>
-                <input type="text" name="citizen_name" id="citizen_name" value="{{ form.citizen_name if form else '' }}"
-                    autocomplete="off" required>
+            <div class="form-row">
+                <div class="field">
+                    <label for="citizen_name">Full name</label>
+                    <input type="text" name="citizen_name" id="citizen_name"
+                        value="{{ form.citizen_name if form else '' }}" autocomplete="off" maxlength="100" required
+                        autofocus>
+                </div>
+
+                <div class="field">
+                    <label for="address">Address <span class="label-note">Purok / Street</span></label>
+                    <input type="text" name="address" id="address" value="{{ form.address if form else '' }}"
+                        maxlength="150" autocomplete="off" required aria-describedby="address-hint">
+                </div>
             </div>
+            <p class="hint field-note" id="address-hint">The address is used on documents only. It is never printed on
+                the queue slip or shown on the display.</p>
 
             <div class="field">
-                <label for="address">Address (Purok / Street)</label>
-                <input type="text" name="address" id="address" value="{{ form.address if form else '' }}"
-                    maxlength="150" autocomplete="off" required>
-                <p class="hint">Saved with the visit and used on documents. It is never printed on the queue slip or shown on the display.</p>
-            </div>
-
-            <div class="field">
-                <label for="service_id">Requested service</label>
+                <label for="service_id">Service</label>
                 <select name="service_id" id="service_id" required {% if not active_services %}disabled{% endif %}>
                     {% for service in active_services %}
                     <option value="{{ service.id }}" {{ 'selected' if form and form.service_id==service.id|string }}>{{
@@ -47,90 +46,90 @@
             </div>
 
             <fieldset class="field lane-choice">
-                <legend>Client classification</legend>
+                <legend>Lane</legend>
                 <div class="lane-grid">
-                    <label class="lane-card">
-                        <input type="radio" name="lane" value="P" {{ 'checked' if form and form.lane == 'P' }}>
+                    <label class="lane-card lane-card-priority">
+                        <input type="radio" name="lane" value="P" {{ 'checked' if form and form.lane=='P' }}>
+                        <span class="lane-dot" aria-hidden="true"></span>
                         <span class="lane-card-text">
                             <span class="lane-card-title">Priority</span>
                             <span class="lane-card-desc">Senior citizens, persons with disabilities, pregnant
                                 women</span>
                         </span>
-                        <span class="lane-dot" aria-hidden="true"></span>
                     </label>
                     <label class="lane-card">
-                        <input type="radio" name="lane" value="R" {{ 'checked' if not form or form.lane != 'P' }}>
+                        <input type="radio" name="lane" value="R" {{ 'checked' if not form or form.lane !='P' }}>
+                        <span class="lane-dot" aria-hidden="true"></span>
                         <span class="lane-card-text">
                             <span class="lane-card-title">Regular</span>
                             <span class="lane-card-desc">All other walk-in visitors</span>
                         </span>
-                        <span class="lane-dot" aria-hidden="true"></span>
                     </label>
                 </div>
             </fieldset>
 
             <button type="submit" class="btn btn-primary btn-block btn-lg" {% if not active_services %}disabled{% endif
-                %}>Generate ticket</button>
+                %}>{{ icon('printer' if auto_print else 'plus', 20) }} {% if auto_print %}Generate and print ticket{% else %}Generate ticket{%
+                endif %}</button>
         </form>
     </section>
 
-    <aside class="queue-panel" aria-label="Live queue status">
-        <section class="card">
-            <h2 class="card-title">Live Queue</h2>
-
-            <div class="qs-now">
-                <span class="label">Now serving</span>
-                <strong class="qs-number">{{ queue_info.now_serving or '—' }}</strong>
+    <aside class="card queue-glance" aria-labelledby="glance-title">
+        <h2 class="card-title" id="glance-title">Queue right now</h2>
+        <dl class="glance-list">
+            <div class="glance-row glance-now">
+                <dt>Now serving</dt>
+                <dd class="cell-num">{{ queue_info.now_serving or '—' }}</dd>
             </div>
-
-            <div class="qs-next">
-                <span class="label">Next in line</span>
-                <strong>{{ queue_info.next_up or '—' }}</strong>
+            <div class="glance-row">
+                <dt>Next in line</dt>
+                <dd class="cell-num">{{ queue_info.next_up or '—' }}</dd>
             </div>
-
-            <div class="qs-lanes">
-                <div class="qs-lane">
-                    {{ lane_tag('P') }}
-                    <strong>{{ queue_info.waiting_priority }}</strong>
-                    <span>waiting</span>
-                </div>
-                <div class="qs-lane">
-                    {{ lane_tag('R') }}
-                    <strong>{{ queue_info.waiting_regular }}</strong>
-                    <span>waiting</span>
-                </div>
+            <div class="glance-row">
+                <dt>{{ lane_tag('P') }} waiting</dt>
+                <dd>{{ queue_info.waiting_priority }}</dd>
             </div>
-        </section>
+            <div class="glance-row">
+                <dt>{{ lane_tag('R') }} waiting</dt>
+                <dd>{{ queue_info.waiting_regular }}</dd>
+            </div>
+        </dl>
+        <a class="btn btn-outline btn-block" href="/queue_management">{{ icon('list', 18) }} Go to the counter</a>
     </aside>
 </div>
+
 <section class="card">
-    <h2 class="card-title">Registered Today <span class="count-pill">{{ total_today }}</span></h2>
+    <div class="section-head">
+        <h2>Registered today <span class="count-pill">{{ total_today }}</span></h2>
+    </div>
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
                     <th>Ticket</th>
                     <th>Visitor name</th>
-                    <th>Type</th>
+                    <th>Lane</th>
                     <th>Service</th>
-                    <th>Time registered</th>
-                    <th>Actions</th>
+                    <th>Registered</th>
+                    <th>Status</th>
+                    <th><span class="sr-only">Actions</span></th>
                 </tr>
             </thead>
             <tbody>
                 {% for ticket in tickets %}
                 <tr>
-                    <td class="cell-primary">{{ ticket.ticket_number }}</td>
+                    <td class="cell-primary cell-num">{{ ticket.ticket_number }}</td>
                     <td class="cell-primary">{{ ticket.citizen_name }}</td>
                     <td>{{ lane_tag(ticket.lane) }}</td>
-                    <td>{{ ticket.service_label }}</td>
-                    <td>{{ ticket.created_at.strftime('%I:%M %p') }}</td>
+                    <td class="cell-nowrap">{{ ticket.service_label }}</td>
+                    <td class="cell-num">{{ ticket.created_at.strftime('%I:%M %p') }}</td>
+                    <td>{{ badge(ticket.status, 'At the counter' if ticket.status == 'called' else None) }}</td>
                     <td>
                         <div class="row-actions">
                             {% if ticket.status == 'waiting' %}
                             <button type="button" class="btn btn-sm btn-danger-outline" data-confirm
-                                data-action="/tickets/delete/{{ ticket.id }}" data-title="Delete this ticket?"
-                                data-message="{{ ticket.ticket_number }} ({{ ticket.citizen_name }}) will be removed from the queue. Deleted tickets are not saved to attendance history and cannot be restored."
+                                data-action="/tickets/delete/{{ ticket.id }}" data-title="Delete {{ ticket.ticket_number }}?"
+                                data-message="{{ ticket.citizen_name }} will be removed from the queue. Deleted tickets are not saved to attendance history and cannot be restored."
                                 data-label="Delete ticket" data-variant="danger">{{ icon('trash', 16) }} Delete</button>
                             {% endif %}
                         </div>
@@ -138,7 +137,8 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" class="empty-row">No tickets registered yet today.</td>
+                    <td colspan="7" class="empty-row">No visitors registered yet today. Use the form above to issue the
+                        first ticket.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -149,24 +149,28 @@
 {% block dialogs %}
 <dialog class="modal" id="register-confirm-dialog">
     <div class="modal-body">
-        <h2>Generate this ticket?</h2>
+        <h2>Check the details</h2>
         <p class="modal-text">
             {% if auto_print %}
-            The queue slip will print right away. Make sure the printer is on and has paper.
+            The slip prints as soon as you confirm. Make sure the printer is on and has paper.
             {% else %}
-            The ticket will be saved. You can print the slip on the next screen.
+            The ticket is saved when you confirm. You can print the slip on the next screen.
             {% endif %}
         </p>
         <dl class="confirm-summary">
-            <dt>Client</dt><dd id="rc-name"></dd>
-            <dt>Address</dt><dd id="rc-address"></dd>
-            <dt>Service</dt><dd id="rc-service"></dd>
-            <dt>Lane</dt><dd id="rc-lane"></dd>
+            <dt>Visitor</dt>
+            <dd id="rc-name"></dd>
+            <dt>Address</dt>
+            <dd id="rc-address"></dd>
+            <dt>Service</dt>
+            <dd id="rc-service"></dd>
+            <dt>Lane</dt>
+            <dd id="rc-lane"></dd>
         </dl>
         <div class="modal-actions">
-            <button type="button" class="btn btn-outline" data-close>Go back</button>
+            <button type="button" class="btn btn-outline" data-close>Change details</button>
             <button type="button" class="btn btn-primary" id="register-confirm-btn" autofocus>
-                {% if auto_print %}Generate &amp; print{% else %}Generate ticket{% endif %}
+                {% if auto_print %}Generate and print{% else %}Generate ticket{% endif %}
             </button>
         </div>
     </div>
@@ -195,6 +199,7 @@
             document.getElementById('rc-service').textContent = service.selectedIndex >= 0 ? service.options[service.selectedIndex].text : '';
             document.getElementById('rc-lane').textContent = lane && lane.value === 'P' ? 'Priority' : 'Regular';
             dialog.showModal();
+            confirmBtn.focus();                           // Enter confirms; Esc goes back to the form
         });
 
         confirmBtn.addEventListener('click', () => {
