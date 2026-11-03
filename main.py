@@ -99,6 +99,38 @@ templates = Jinja2Templates(directory=resource_path("templates"), context_proces
 
 APP_TITLE = "Barangay System"                 # the name people see; change it here only
 templates.env.globals["app_title"] = APP_TITLE
+
+# APPEARANCE: light / dark mode. Saved in a file next to the database, because the desktop window
+# starts in private mode on a new port each launch, so the browser itself cannot remember it.
+UI_PREFS_FILE = Path(data_path("ui_prefs.json"))
+THEMES = ("system", "light", "dark")           # system = follow the Windows setting
+DISPLAY_THEMES = ("light", "dark")             # the visitor display screen has its own setting
+_ui_prefs_lock = threading.Lock()
+
+
+def load_ui_prefs() -> dict:
+    try:
+        data = json.loads(UI_PREFS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}                              # missing or damaged file: use the defaults
+    if not isinstance(data, dict):
+        data = {}
+    theme, display = data.get("theme"), data.get("display_theme")
+    return {"theme": theme if theme in THEMES else "system",
+            "display_theme": display if display in DISPLAY_THEMES else "light"}
+
+
+def save_ui_pref(key: str, value: str) -> None:
+    with _ui_prefs_lock:                       # two quick clicks must not lose each other's change
+        prefs = load_ui_prefs()
+        prefs[key] = value
+        tmp = UI_PREFS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(prefs), encoding="utf-8")
+        os.replace(tmp, UI_PREFS_FILE)         # atomic, like the printer settings
+
+
+templates.env.globals["ui_theme"] = lambda: load_ui_prefs()["theme"]
+templates.env.globals["display_theme"] = lambda: load_ui_prefs()["display_theme"]
 PAGE_SIZE = 15
 
 def render_registration(request: Request, error: str | None = None, form: dict | None = None, status_code: int = 200):
@@ -3054,6 +3086,33 @@ def add_or_number(request: Request, doc_id: int, or_number: str = Form(""), back
 @app.get("/about", dependencies=[Depends(login_required)])
 def show_about(request: Request):
     return templates.TemplateResponse(request, "about.html", {})
+
+
+@app.post("/preferences/theme", dependencies=[Depends(login_required)])
+def set_theme(theme: str = Form("")):
+    """The staff app's light / dark / system choice, from the sun-moon menu in the top bar."""
+    if theme not in THEMES:
+        return JSONResponse({"error": "Unknown theme."}, status_code=400)
+    try:
+        save_ui_pref("theme", theme)
+    except OSError:
+        log.exception("Could not save the theme")
+        return JSONResponse({"error": "The setting could not be saved."}, status_code=500)
+    return {"theme": theme}
+
+
+@app.post("/display/theme")
+def set_display_theme(theme: str = Form("")):
+    """The display screen's light / dark choice. No sign-in, like the display page itself; the
+    cross-origin check above still applies, and the only possible values are light and dark."""
+    if theme not in DISPLAY_THEMES:
+        return JSONResponse({"error": "Unknown theme."}, status_code=400)
+    try:
+        save_ui_pref("display_theme", theme)
+    except OSError:
+        log.exception("Could not save the display theme")
+        return JSONResponse({"error": "The setting could not be saved."}, status_code=500)
+    return {"theme": theme}
 
 
 @app.get("/display")

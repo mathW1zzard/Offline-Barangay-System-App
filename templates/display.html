@@ -1,6 +1,6 @@
 {% from "_macros.html" import icon -%}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="{{ display_theme() }}">
 
 <head>
     <meta charset="utf-8">
@@ -8,9 +8,6 @@
     <title>Now Serving</title>
     <link rel="stylesheet" href="/static/style.css">
 
-    <script>
-        try { if (localStorage.getItem('theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch (e) { }
-    </script>
 
     <style>
         :root {
@@ -141,14 +138,15 @@
             toggleBtn.title = label;
         }
 
-        let savedTheme = null;
-        try { savedTheme = localStorage.getItem("theme"); } catch (e) { /* storage unavailable: use light */ }
-        applyTheme(savedTheme === "dark" ? "dark" : "light");
+        // The saved choice arrives in <html data-theme>, written by the server, so the screen never
+        // flashes the wrong colour. A click switches at once and saves it for the next start.
+        applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light");
 
         toggleBtn.addEventListener("click", () => {
             const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
             applyTheme(next);
-            try { localStorage.setItem("theme", next); } catch (e) { /* not saved, still switches */ }
+            fetch("/display/theme", { method: "POST", body: new URLSearchParams({ theme: next }) })
+                .catch(() => { /* not saved: it still switches for now */ });
         });
 
         async function refresh() {

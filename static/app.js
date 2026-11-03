@@ -24,6 +24,59 @@
         });
     }
 
+    // ---------- Light / dark menu ----------
+    // The choice is applied at once by changing <html data-theme>, then saved by the server so it
+    // survives restarts. If saving fails the new look stays for now and a short note says so.
+    const themeBtn = $('#theme-btn');
+    const themeMenu = $('#theme-options');
+    if (themeBtn && themeMenu) {
+        const themeError = $('#theme-error');
+        const choices = $$('[data-theme-choice]', themeMenu);
+        const setThemeOpen = (open) => {
+            themeMenu.hidden = !open;
+            themeBtn.setAttribute('aria-expanded', String(open));
+            if (open) (choices.find((c) => c.getAttribute('aria-checked') === 'true') || choices[0]).focus();
+        };
+        themeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setThemeOpen(themeMenu.hidden);
+        });
+        document.addEventListener('click', (e) => {
+            if (!themeMenu.hidden && !themeMenu.contains(e.target)) setThemeOpen(false);
+        });
+        themeMenu.addEventListener('keydown', (e) => {
+            const i = choices.indexOf(document.activeElement);
+            if (e.key === 'Escape') { setThemeOpen(false); themeBtn.focus(); }
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const step = e.key === 'ArrowDown' ? 1 : -1;
+                choices[(i + step + choices.length) % choices.length].focus();
+            }
+        });
+        choices.forEach((choice) => {
+            choice.addEventListener('click', async () => {
+                const theme = choice.dataset.themeChoice;
+                document.documentElement.setAttribute('data-theme', theme);
+                choices.forEach((c) => c.setAttribute('aria-checked', String(c === choice)));
+                themeError.hidden = true;
+                try {
+                    const res = await fetch('/preferences/theme', {
+                        method: 'POST',
+                        body: new URLSearchParams({ theme }),
+                        headers: { Accept: 'application/json' },
+                    });
+                    const json = (res.headers.get('content-type') || '').includes('application/json');
+                    if (!res.ok || !json) throw new Error('not saved');
+                    setThemeOpen(false);
+                    themeBtn.focus();
+                } catch (err) {
+                    themeError.textContent = 'Changed for now, but not saved. It goes back after a restart.';
+                    themeError.hidden = false;
+                }
+            });
+        });
+    }
+
     // ---------- Modals ----------
     // One confirm dialog per page; any [data-confirm] button fills it in.
     const confirmDialog = $('#confirm-dialog');
@@ -271,7 +324,7 @@
     const donut = $('#donut');
     const dataEl = $('#donut-data');
     if (donut && dataEl) {
-        const palette = ['#ff6a00', '#1e293b', '#2563eb', '#16a34a', '#d97706', '#9333ea', '#0d9488', '#dc2626'];
+        const palette = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)', 'var(--chart-6)', 'var(--chart-7)', 'var(--chart-8)'];
         const data = JSON.parse(dataEl.textContent).map((d, i) => ({ ...d, color: palette[i % palette.length] }));
         const total = data.reduce((sum, d) => sum + d.count, 0);
         const svg = $('svg', donut);
@@ -288,12 +341,12 @@
             c.setAttribute('cy', '100');
             c.setAttribute('r', String(R));
             c.setAttribute('fill', 'none');
-            c.setAttribute('stroke', stroke);
+            c.style.stroke = stroke;                  // a style, so CSS variables work
             c.setAttribute('stroke-width', '22');
             c.setAttribute('transform', 'rotate(-90 100 100)');
             return c;
         };
-        svg.appendChild(circle('#e2e8f0'));
+        svg.appendChild(circle('var(--chart-track)'));
 
         const items = [];
         const showTotal = () => {
