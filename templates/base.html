@@ -1,7 +1,7 @@
 {% from "_macros.html" import icon %}
 {% from "_macros.html" import doc_header %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="{{ ui_theme() }}">
 
 <head>
     <meta charset="UTF-8">
@@ -82,6 +82,29 @@
                         <span class="dot{{ ' dot-pulse' if in_queue }}"></span>
                         <strong>{{ in_queue }}</strong> in queue
                     </a>
+
+                    {#- Light / dark: applied at once, saved by the app (see /preferences/theme). -#}
+                    {% set theme = ui_theme() %}
+                    <div class="theme-menu">
+                        <button type="button" class="icon-btn" id="theme-btn" aria-haspopup="menu"
+                            aria-expanded="false" aria-controls="theme-options" aria-label="Light or dark mode"
+                            title="Light or dark mode">
+                            <span class="icon-sun">{{ icon('sun', 20) }}</span>
+                            <span class="icon-moon">{{ icon('moon', 20) }}</span>
+                        </button>
+                        <div class="theme-options" id="theme-options" role="menu" aria-label="Appearance" hidden>
+                            <button type="button" role="menuitemradio" data-theme-choice="light"
+                                aria-checked="{{ 'true' if theme == 'light' else 'false' }}">{{ icon('sun', 18) }}
+                                Light</button>
+                            <button type="button" role="menuitemradio" data-theme-choice="dark"
+                                aria-checked="{{ 'true' if theme == 'dark' else 'false' }}">{{ icon('moon', 18) }}
+                                Dark</button>
+                            <button type="button" role="menuitemradio" data-theme-choice="system"
+                                aria-checked="{{ 'true' if theme == 'system' else 'false' }}">{{ icon('monitor', 18) }}
+                                Same as Windows</button>
+                            <p class="theme-error" id="theme-error" role="alert" hidden></p>
+                        </div>
+                    </div>
 
                     <div class="user-menu">
 
