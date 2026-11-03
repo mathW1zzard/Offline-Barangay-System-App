@@ -2,7 +2,9 @@
 __pycache__/
 *.pyc[cod]
 
-# Build output
+# Build output (make_notices.py writes the two license files on every build)
+THIRD_PARTY_NOTICES.txt
+third_party_licenses.json
 build/
 dist/
 installer_output/

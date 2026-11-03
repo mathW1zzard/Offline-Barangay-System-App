@@ -16,6 +16,8 @@ datas = [
     ("templates", "templates"),
     ("static", "static"),          # includes static/fonts and static/audio
     ("app_icon.ico", "."),
+    ("terms_and_conditions.txt", "."),     # shown on the About page
+    ("third_party_licenses.json", "."),    # made by make_notices.py; build.bat runs it first
 ]
 
 datas += collect_data_files("escpos")

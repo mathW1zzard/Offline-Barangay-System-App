@@ -3,7 +3,7 @@
 {% block title %}About{% endblock %}
 {% block page_title %}About{% endblock %}
 {% block description %}About {{ app_title }}{% endblock %}
-{% block page_subtitle %}About the system{% endblock %}
+{% block page_subtitle %}Version, help and support{% endblock %}
 
 {% block head %}
 <style>
@@ -22,303 +22,428 @@
         gap: 8px 14px;
     }
 
-    .about-desc {
-        font-size: 17px;
+    .about-desc,
+    .about-list,
+    .help-list {
+        font-size: 16px;
         line-height: 1.6;
+        max-width: 75ch;
+    }
+
+    .about-desc {
         color: var(--muted);
-        max-width: 70ch;
         margin-top: 16px;
     }
 
-    /* ---- Developer cards ---- */
-    .dev-grid {
+    .about-list {
+        margin: 12px 0 0;
+        padding-left: 22px;
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        gap: 24px;
+        gap: 6px;
     }
 
-    .dev-card {
-        position: relative;
+    /* ---- System information ---- */
+    .sys-list {
+        margin: 16px 0 0;
+        display: grid;
+        border-top: 1px solid var(--line);
+    }
+
+    .sys-list > div {
+        display: grid;
+        grid-template-columns: minmax(150px, 220px) 1fr;
+        gap: 4px 16px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+    }
+
+    .sys-list dt {
+        font-weight: 700;
+        color: var(--text);
+    }
+
+    .sys-list dd {
+        margin: 0;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+        user-select: text;
+    }
+
+    .sys-actions {
         display: flex;
-        flex-direction: column;
+        flex-wrap: wrap;
         align-items: center;
-        text-align: center;
+        gap: 10px 16px;
+        margin-top: 16px;
+    }
+
+    @media (max-width: 560px) {
+        .sys-list > div {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* ---- Quick help ---- */
+    .help-sub {
+        margin: 22px 0 8px;
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--text);
+    }
+
+    .help-list {
+        display: grid;
         gap: 8px;
-        padding: 36px 24px 24px;
-        background: var(--card);
+    }
+
+    .help-list details {
         border: 1px solid var(--line);
-        border-radius: 20px;
-        box-shadow: var(--shadow);
-        overflow: hidden;
-        transition: transform .2s ease, box-shadow .2s ease;
+        border-radius: var(--radius-btn);
+        padding: 12px 16px;
     }
 
-    .dev-card::before {
-        /* orange accent bar across the top */
-        content: "";
-        position: absolute;
-        inset: 0 0 auto 0;
-        height: 5px;
+    .help-list summary,
+    .about-fold > summary {
+        cursor: pointer;
+        font-weight: 700;
+        color: var(--text);
     }
 
-    .dev-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 2px 4px rgba(15, 23, 42, .05), 0 14px 32px rgba(15, 23, 42, .10);
+    .help-list details p {
+        margin: 8px 0 0;
+        color: var(--muted);
+    }
+
+    kbd {
+        display: inline-block;
+        padding: 1px 7px;
+        border: 1px solid var(--line);
+        border-bottom-width: 2px;
+        border-radius: 6px;
+        background: var(--bg-sunken);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text);
+        white-space: nowrap;
+    }
+
+    /* ---- Developer ---- */
+    .dev-card {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px 24px;
+        margin-top: 8px;
     }
 
     .dev-avatar {
-        width: 88px;
-        height: 88px;
+        width: 72px;
+        height: 72px;
+        flex: none;
         border-radius: 50%;
-        background: var(--navy);
+        background: var(--avatar-bg);
         color: #fff;
         display: grid;
         place-items: center;
-        font-size: 28px;
+        font-size: 24px;
         font-weight: 800;
         letter-spacing: .04em;
         box-shadow: 0 0 0 6px var(--orange-soft);
-        margin-bottom: 10px;
     }
 
     .dev-name {
         font-size: 19px;
         font-weight: 800;
         color: var(--text);
-        line-height: 1.3;
-    }
-
-    .dev-role {
-        margin-top: 2px;
-        padding: 5px 12px;
-        border-radius: 14px;
-        background: var(--orange-soft);
-        color: var(--orange-ink);
-        font-size: 13px;
-        font-weight: 700;
-        line-height: 1.4;
-    }
-
-    .dev-org {
-        font-size: 14px;
-        color: var(--muted);
-        margin: 4px 0 14px;
     }
 
     .dev-email {
-        /* sits at the bottom of every card, so all cards line up */
-        margin-top: auto;
-        width: 100%;
         display: inline-flex;
         align-items: center;
-        justify-content: center;
         gap: 8px;
-        padding: 10px 14px;
-        border: 1px solid var(--line);
-        border-radius: var(--radius-btn);
-        color: var(--text);
-        font-size: 13px;
-        font-weight: 600;
+        margin-top: 6px;
+        color: var(--blue-ink);
+        font-weight: 700;
         text-decoration: none;
         overflow-wrap: anywhere;
-        transition: background .15s, border-color .15s, color .15s;
     }
 
-    .dev-email .icon {
-        flex: none;
-    }
-
-    .dev-email:hover {
-        background: var(--orange-soft);
-        border-color: var(--orange);
-        color: var(--orange-ink);
-    }
-
-    /* ---- Contact, acknowledgements, footer ---- */
-    .contact-row {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 6px 14px;
-        margin-top: 14px;
-        font-size: 16px;
-    }
-
-    .contact-row .label {
-        min-width: 72px;
-    }
-
-    .about-link {
-        color: var(--blue);
-        font-weight: 600;
-        word-break: break-all;
-    }
-
+    .dev-email:hover,
     .about-link:hover {
         text-decoration: underline;
     }
 
-    .ack-list {
-        list-style: none;
-        margin: 18px 0 0;
-        padding: 0;
-        display: grid;
-        gap: 16px;
-    }
-
-    .ack-list li {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        padding-left: 16px;
-    }
-
-    .ack-name {
+    .about-link {
+        color: var(--blue-ink);
         font-weight: 700;
+    }
+
+    /* ---- Terms and licenses (folded) ---- */
+    .about-fold > summary {
+        font-size: 18px;
+        font-weight: 800;
+    }
+
+    .about-fold[open] > summary {
+        margin-bottom: 12px;
+    }
+
+    .about-terms {
+        max-height: 420px;
+        overflow: auto;
+        margin: 0;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-btn);
+        background: var(--bg-sunken);
+        font-family: inherit;
+        font-size: 14px;
+        line-height: 1.6;
+        white-space: pre-wrap;
         color: var(--text);
-    }
-
-    .ack-role {
-        font-size: 14px;
-        color: var(--muted);
-    }
-
-    .about-footer {
-        text-align: center;
-        color: var(--faint);
-        font-size: 14px;
-        padding-bottom: 8px;
     }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<!-- 1. ABOUT THE SYSTEM -->
+<!-- 1. THE APP -->
 <section class="card">
     <h2 class="card-title">{{ icon('info', 22) }} About the System</h2>
     <h3 class="about-name">{{ app_title }}</h3>
     <div class="about-meta">
-        <span class="count-pill">Version 1.0.1</span>
-        <span class="hint">2026</span>
+        <span class="count-pill">Version {{ app_version }}</span>
+        <span class="hint">Released {{ released }}</span>
         <span class="hint">&middot; Installed for {{ barangay_name }}</span>
     </div>
-    <p class="about-desc">An offline queue, service and attendance system for barangay offices. One Windows desktop
-        app, with no internet and no server to maintain.</p>
+    <p class="about-desc">An offline system for barangay offices: a queue with priority lanes, the visitor
+        logbook, and certificates printed with the barangay's own design. One Windows desktop app, with no
+        internet and no server to maintain.</p>
 </section>
 
-<!-- 2. DEVELOPERS -->
+<!-- 2. WHAT'S NEW -->
 <section class="card">
-    <h2 class="card-title">{{ icon('user', 22) }} Developers</h2>
-    <div class="dev-grid">
+    <h2 class="card-title">{{ icon('check', 22) }} What's New in Version {{ app_version }}</h2>
+    <ul class="about-list">
+        <li>Each certificate can use the barangay's own design, loaded from a Word (.docx) file or a picture of
+            the whole page.</li>
+        <li>The control number, nationality and CTC details (number, place and date) can go anywhere in the
+            wording.</li>
+        <li>Bold, centre, right and indent in the wording, plus the text size, line spacing and the space above
+            the signatures for each certificate.</li>
+        <li>A new header: Republic of the Philippines, municipality and province, barangay name, up to three
+            logos, and an office line in the barangay's colour.</li>
+        <li>Choose who signs each certificate: the Punong Barangay, the Secretary, or both.</li>
+        <li>The client's address is required at registration and appears on the attendance printout (never on
+            the queue slip).</li>
+        <li>Logos and designs are saved inside the database, so one backup holds everything.</li>
+    </ul>
+</section>
 
-        <article class="dev-card">
-            <div class="dev-avatar" aria-hidden="true">JD</div>
-            <h3 class="dev-name">Joseph R. Dionisio</h3>
-            <p class="dev-role">Full Stack Developer</p>
-            <p class="dev-org">University of La Salette, Inc.</p>
-            <a class="dev-email" href="mailto:dionisiojoseph213@gmail.com">{{ icon('mail', 16) }}
-                dionisiojoseph213@gmail.com</a>
-        </article>
-
-        <article class="dev-card">
-            <div class="dev-avatar" aria-hidden="true">JM</div>
-            <h3 class="dev-name">Jhade Lorenz G. Martin</h3>
-            <p class="dev-role">Documentation, Hardware Integration and Testing Support</p>
-            <p class="dev-org">University of La Salette, Inc.</p>
-            <a class="dev-email" href="mailto:jhadelorenz650@gmail.com">{{ icon('mail', 16) }}
-                jhadelorenz650@gmail.com</a>
-        </article>
-
-        <article class="dev-card">
-            <div class="dev-avatar" aria-hidden="true">KM</div>
-            <h3 class="dev-name">Katrina Jessica Manzanillo</h3>
-            <p class="dev-role">QA Lead, Client Coordination and Consultation</p>
-            <p class="dev-org">University of La Salette, Inc.</p>
-            <a class="dev-email" href="mailto:manzanillokatrina1325@gmail.com">{{ icon('mail', 16) }}
-                manzanillokatrina1325@gmail.com</a>
-        </article>
-
+<!-- 3. SYSTEM INFORMATION -->
+<section class="card">
+    <h2 class="card-title">{{ icon('database', 22) }} System Information</h2>
+    <p class="hint">When you ask for help, press <strong>Copy details</strong> and paste them into your
+        message, so the developer knows exactly what this computer is running.</p>
+    <dl class="sys-list" id="system-details">
+        {% for label, value in details %}
+        <div>
+            <dt>{{ label }}</dt>
+            <dd>{{ value }}</dd>
+        </div>
+        {% endfor %}
+    </dl>
+    <div class="sys-actions">
+        <button type="button" class="btn btn-primary" id="copy-details">{{ icon('clipboard', 18) }} Copy details</button>
+        <a class="btn btn-outline" href="/maintenance">{{ icon('database', 18) }} Backups and printer</a>
+        <span class="hint" id="copy-status" role="status"></span>
     </div>
 </section>
 
-<!-- 3. TECHNOLOGIES USED -->
+<!-- 4. QUICK HELP -->
 <section class="card">
-    <h2 class="card-title">{{ icon('database', 22) }} Technologies Used</h2>
+    <h2 class="card-title">{{ icon('file-text', 22) }} Quick Help</h2>
+
+    <h3 class="help-sub">Writing certificate wording (Templates)</h3>
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
-                    <th>Category</th>
-                    <th>Technologies</th>
+                    <th>To do this</th>
+                    <th>Press or type</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td class="cell-primary">Languages</td>
-                    <td>Python 3.13, JavaScript, HTML5, CSS3</td>
+                    <td class="cell-primary">Bold</td>
+                    <td>Select the words, then <kbd>Ctrl</kbd> + <kbd>B</kbd> (the words get ** on each side)</td>
                 </tr>
                 <tr>
-                    <td class="cell-primary">Backend</td>
-                    <td>FastAPI, Uvicorn</td>
+                    <td class="cell-primary">Centre a line</td>
+                    <td><kbd>Ctrl</kbd> + <kbd>E</kbd>, or start the line with &gt;&gt;</td>
                 </tr>
                 <tr>
-                    <td class="cell-primary">Database</td>
-                    <td>SQLite, SQLAlchemy, Alembic (migrations, development only)</td>
+                    <td class="cell-primary">Line on the right</td>
+                    <td>The Right button, or start the line with &gt;&gt;&gt;</td>
                 </tr>
                 <tr>
-                    <td class="cell-primary">Frontend</td>
-                    <td>Jinja2 templates, plain CSS, vanilla JavaScript, Plus Jakarta Sans</td>
+                    <td class="cell-primary">Indent / remove the indent</td>
+                    <td><kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd></td>
                 </tr>
                 <tr>
-                    <td class="cell-primary">Live updates &amp; audio</td>
-                    <td>FastAPI WebSockets, pre-recorded MP3 announcements</td>
+                    <td class="cell-primary">New line / new paragraph</td>
+                    <td><kbd>Enter</kbd> / <kbd>Enter</kbd> twice; each extra <kbd>Enter</kbd> adds an empty line</td>
                 </tr>
                 <tr>
-                    <td class="cell-primary">Security</td>
-                    <td>Session cookies (Starlette), bcrypt password hashing</td>
+                    <td class="cell-primary">The client's details</td>
+                    <td>Use the field buttons, e.g. {Client name} or {Control number}, so they are spelled right</td>
                 </tr>
                 <tr>
-                    <td class="cell-primary">Printing</td>
-                    <td>python-escpos, pywin32 (ESC/POS thermal printer)</td>
-                </tr>
-                <tr>
-                    <td class="cell-primary">Desktop &amp; packaging</td>
-                    <td>pywebview, PyInstaller, Inno Setup</td>
+                    <td class="cell-primary">Leave the wording box</td>
+                    <td><kbd>Esc</kbd>, then <kbd>Tab</kbd></td>
                 </tr>
             </tbody>
         </table>
     </div>
+
+    <h3 class="help-sub">If something goes wrong</h3>
+    <div class="help-list">
+        <details>
+            <summary>The queue slip does not print</summary>
+            <p>Check that the printer is on, has paper, and its cable is plugged in. Then open
+                <a class="about-link" href="/maintenance">Maintenance</a>, choose the printer under Receipt printer,
+                and press <strong>Print test slip</strong>.</p>
+        </details>
+        <details>
+            <summary>I forgot my password</summary>
+            <p>On the login page, click <strong>Forgot password?</strong> and type the recovery key (it starts with
+                BQS-) that was saved during first-time setup. If the recovery key is lost too, contact the
+                developer.</p>
+        </details>
+        <details>
+            <summary>A certificate prints on two pages</summary>
+            <p>Check that the paper in the printer is the size the design needs (Letter, A4 or long bond). If it
+                still does not fit, lower the text size or the line spacing of that certificate in Templates; the
+                preview warns you when the wording is too long.</p>
+        </details>
+        <details>
+            <summary>We need old records back, or the computer broke</summary>
+            <p>The app makes a backup every day and keeps one for each of the last 14 days it was used. You can
+                also save a copy to a USB drive on the Maintenance page. Do not copy or replace the app's files
+                yourself: contact the developer and include the system details above.</p>
+        </details>
+    </div>
 </section>
 
-<!-- 4. CONTACT -->
+<!-- 5. DATA AND PRIVACY -->
 <section class="card">
-    <h2 class="card-title">{{ icon('mail', 22) }} Contact</h2>
-    <p class="hint">Questions, bug reports or support requests? Reach us here.</p>
-    <div class="contact-row">
-        <span class="label">Email</span>
-        <a class="about-link" href="mailto:softtech.builders26@gmail.com">softtech.builders26@gmail.com</a>
-    </div>
-    <div class="contact-row">
-        <span class="label">GitHub</span>
-        <a class="about-link" href="https://github.com/mathW1zzard/barangay-queue-management-system-barangay-4-san-mateo-" target="_blank"
-            rel="noopener noreferrer">github.com/mathW1zzard/barangay-queue-management-system</a>
-    </div>
-</section>
-
-<!-- 5. ACKNOWLEDGEMENTS -->
-<section class="card">
-    <h2 class="card-title">{{ icon('check', 22) }} Acknowledgements</h2>
-    <p class="hint">With sincere thanks to the people and communities who made this system possible.</p>
-    <ul class="ack-list">
-        <li><span class="ack-name">Hon. Leo Aguilar Umipig</span><span class="ack-role">Barangay Captain</span></li>
-        <!-- add a role line here if you like -->
-        <li><span class="ack-name">Mary Joy D. Del Mundo</span><span class="ack-role">Barangay Secretary</span></li>
-        <li><span class="ack-name">Prof. King Christian D. Antonio</span><span class="ack-role">Project adviser</span>
-        </li>
-        <li><span class="ack-name">University of La Salette, Inc.</span><span class="ack-role">School</span></li>
+    <h2 class="card-title">{{ icon('shield', 22) }} Your Data and Privacy</h2>
+    <ul class="about-list">
+        <li>Everything is stored only on this computer, in the data folder shown above. The app does not use the
+            internet and sends nothing anywhere.</li>
+        <li>The records hold clients' personal information, so the Data Privacy Act of 2012 (RA 10173) applies.
+            See the Terms of Use below.</li>
+        <li>Only people with an account can open the records. Keep passwords private and log out before you
+            leave the computer.</li>
+        <li>Backups hold the same personal information. Keep any USB drive with a backup in a locked place.</li>
     </ul>
 </section>
 
-<p class="about-footer">&copy; 2026 Soft-Tech Builders</p>
+<!-- 6. DEVELOPER AND SUPPORT -->
+<section class="card">
+    <h2 class="card-title">{{ icon('user', 22) }} Developer and Support</h2>
+    <div class="dev-card">
+        <div class="dev-avatar" aria-hidden="true">JT</div>
+        <div>
+            <p class="dev-name">{{ app_owner }}</p>
+            <p class="hint">Developer of {{ app_title }}</p>
+            <a class="dev-email" href="mailto:{{ support_email }}">{{ icon('mail', 16) }} {{ support_email }}</a>
+        </div>
+    </div>
+    <p class="hint" style="margin-top: 16px;">For questions or problems, send an email with what you were doing,
+        the exact message on the screen (a phone photo is fine), and the system details above.</p>
+</section>
+
+<!-- 7. TERMS OF USE -->
+<section class="card">
+    <details class="about-fold">
+        <summary>Terms of Use</summary>
+        {% if terms %}
+        <pre class="about-terms">{{ terms }}</pre>
+        {% else %}
+        <p class="hint">The terms file was not found. It is shown during installation.</p>
+        {% endif %}
+    </details>
+</section>
+
+<!-- 8. OPEN-SOURCE LICENSES -->
+<section class="card">
+    <details class="about-fold">
+        <summary>Open-Source Licenses</summary>
+        <p class="hint">{{ app_title }} is built with the open-source parts below. Each keeps its own license; the
+            full texts are in THIRD_PARTY_NOTICES.txt in the program folder.</p>
+        {% if licenses %}
+        <div class="table-wrap" style="margin-top: 12px;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Part</th>
+                        <th>Version</th>
+                        <th>License</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for part in licenses %}
+                    <tr>
+                        <td class="cell-primary">{{ part.name }}</td>
+                        <td>{{ part.version }}</td>
+                        <td>{{ part.license }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="hint" style="margin-top: 12px;">The list is made when the app is built (build.bat).</p>
+        {% endif %}
+    </details>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Copy details: the system information as plain lines, ready to paste into an email.
+    (() => {
+        const button = document.getElementById('copy-details');
+        const status = document.getElementById('copy-status');
+        const asText = () => [...document.querySelectorAll('#system-details > div')]
+            .map((row) => `${row.querySelector('dt').textContent.trim()}: ${row.querySelector('dd').textContent.trim()}`)
+            .join('\n');
+        const oldWay = (text) => {               // for a WebView that does not allow the clipboard API
+            const box = document.createElement('textarea');
+            box.value = text;
+            box.setAttribute('readonly', '');
+            box.style.position = 'fixed';
+            box.style.opacity = '0';
+            document.body.appendChild(box);
+            box.select();
+            const done = document.execCommand('copy');
+            box.remove();
+            return done;
+        };
+        button.addEventListener('click', async () => {
+            const text = asText();
+            let done = false;
+            try {
+                await navigator.clipboard.writeText(text);
+                done = true;
+            } catch {
+                done = oldWay(text);
+            }
+            status.textContent = done ? 'Copied. Paste it into your email to the developer.'
+                : 'Could not copy. Select the details above and press Ctrl+C.';
+        });
+    })();
+</script>
 {% endblock %}

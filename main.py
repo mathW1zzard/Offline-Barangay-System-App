@@ -9,7 +9,8 @@ from fastapi.responses import RedirectResponse, Response, FileResponse, JSONResp
 from app_logging import setup_logging, log
 setup_logging()
 from database import SessionLocal, Ticket, Service, Visit, Admin, AdminLog, engine, DocumentTemplate, IssuedDocument
-from paths import resource_path, data_path
+from database import LATEST as DB_LATEST
+from paths import resource_path, data_path, DATA_DIR
 import branding
 import doc_templates
 import documents
@@ -37,6 +38,7 @@ import asyncio
 import math
 import re
 import os
+import platform
 from time import monotonic          
 from urllib.parse import urlparse, urlencode
 from contextlib import asynccontextmanager
@@ -98,7 +100,13 @@ def branding_context(request: Request) -> dict:
 templates = Jinja2Templates(directory=resource_path("templates"), context_processors=[branding_context])
 
 APP_TITLE = "Barangay System"                 # the name people see; change it here only
-templates.env.globals["app_title"] = APP_TITLE
+APP_VERSION = "2.0.0"                         # keep the same as MyAppVersion in installer.iss
+APP_RELEASED = "November 2026"               # when this version came out (About page)
+APP_OWNER = "Jo-Tech-Developer"               # shown in every footer and on the About page
+SUPPORT_EMAIL = "jotechdeveloper@gmail.com"   # where barangays send questions and problem reports
+COPYRIGHT_YEAR = 2026
+templates.env.globals.update(app_title=APP_TITLE, app_version=APP_VERSION, app_owner=APP_OWNER,
+                             support_email=SUPPORT_EMAIL, copyright_year=COPYRIGHT_YEAR)
 
 # APPEARANCE: light / dark mode. Saved in a file next to the database, because the desktop window
 # starts in private mode on a new port each launch, so the browser itself cannot remember it.
@@ -3083,9 +3091,82 @@ def add_or_number(request: Request, doc_id: int, or_number: str = Form(""), back
 
 
 # ABOUT
+TERMS_FILE = Path(resource_path("terms_and_conditions.txt"))         # the same terms the installer shows
+LICENSES_FILE = Path(resource_path("third_party_licenses.json"))     # made by make_notices.py (build.bat)
+
+def newest_backup(folder: Path):
+    """When the newest backup in a folder was made (automatic, or from the Maintenance page), or None."""
+    try:
+        times = [f.stat().st_mtime for f in folder.iterdir()
+                 if f.is_file() and f.suffix == ".db" and f.name.startswith(("auto_", "barangay_system_"))]
+    except OSError:
+        return None
+    return datetime.fromtimestamp(max(times)) if times else None
+
+def system_details() -> list[tuple[str, str]]:
+    """What the developer needs to know when the office asks for help, as (label, value) rows.
+    Read fresh each time the About page opens; nothing here is secret."""
+    rows = [("App", f"{APP_TITLE} {APP_VERSION}"),
+            ("Installed for", branding.get_branding()["full_name"])]
+
+    db_file = Path(data_path("barangay_system.db"))
+    try:
+        size = f"{db_file.stat().st_size / 1048576:.2f} MB"
+    except OSError:
+        size = "size unknown"
+    try:
+        with engine.connect() as con:
+            version = con.exec_driver_sql("PRAGMA user_version").scalar()
+        rows.append(("Database", f"version {version} of {DB_LATEST}, {size}"))
+    except Exception:
+        log.exception("About page: could not read the database version")
+        rows.append(("Database", f"version unknown, {size}"))
+
+    last = newest_backup(BACKUP_DIR_DEFAULT)
+    rows.append(("Last backup", f"{last:%Y-%m-%d %I:%M %p}" if last else "None yet"))
+    rows.append(("Backup folder", str(BACKUP_DIR_DEFAULT)))
+    extra = get_extra_backup_dir()
+    if extra is None:
+        rows.append(("Second backup folder", "Not set"))
+    else:
+        rows.append(("Second backup folder", str(extra) if extra.is_dir() else f"Not found: {extra}"))
+
+    p = load_printer_settings()
+    printer = f"{p['printer_name']} ({p['paper_mm']} mm paper)" if p["printer_name"] else "Not chosen yet"
+    if USE_DUMMY_PRINTER:
+        printer += ", test mode (slips are saved to a file, not printed)"
+    rows.append(("Receipt printer", printer))
+
+    rows.append(("Data folder", str(DATA_DIR)))
+    rows.append(("Windows", f"{platform.system()} {platform.release()} ({platform.version()})"))
+    rows.append(("Computer name", platform.node() or "unknown"))
+    rows.append(("Checked on", f"{datetime.now():%Y-%m-%d %I:%M %p}"))
+    return rows
+
+def terms_text() -> str:
+    try:
+        return TERMS_FILE.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+def bundled_licenses() -> list[dict]:
+    """Name, version and license of each open-source part inside the app (empty until build.bat has run)."""
+    try:
+        rows = json.loads(LICENSES_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(rows, list):
+        return []
+    return [r for r in rows if isinstance(r, dict) and all(isinstance(r.get(k), str) for k in ("name", "version", "license"))]
+
 @app.get("/about", dependencies=[Depends(login_required)])
 def show_about(request: Request):
-    return templates.TemplateResponse(request, "about.html", {})
+    return templates.TemplateResponse(request, "about.html", {
+        "released": APP_RELEASED,
+        "details": system_details(),
+        "terms": terms_text(),
+        "licenses": bundled_licenses(),
+    })
 
 
 @app.post("/preferences/theme", dependencies=[Depends(login_required)])
