@@ -9,8 +9,8 @@
 <!--PERFORMANCE SNAPSHOT-->
 <section>
     <div class="section-head">
-        <h2>Performance Snapshot</h2>
-        <span class="chip">{{ icon('calendar', 18) }} {{ today_label }}</span>
+        <h2>Today at a glance</h2>
+        <p class="date-note">{{ icon('calendar', 18) }} {{ today_label }}</p>
     </div>
 
     <div class="stat-grid">
@@ -36,7 +36,7 @@
 <div class="dash-grid">
     <!--LIVE ACTIVITY-->
     <section class="card">
-        <h2 class="card-title">Live Queue Overview</h2>
+        <h2 class="card-title">Live queue</h2>
         <div class="table-wrap">
             <table>
                 <thead>
@@ -50,13 +50,13 @@
                 <tbody>
                     {% for row in overview %}
                     <tr>
-                        <td class="cell-primary">{{ row.ticket_number }}</td>
+                        <td class="cell-primary cell-num">{{ row.ticket_number }}</td>
                         <td class="cell-primary">{{ row.citizen_name }}</td>
                         <td>{{ row.service_name }}</td>
                         <td>{{ badge(row.status) }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="4" class="empty-row">No activity yet today. Register a client to start the queue.</td></tr>
+                    <tr><td colspan="4" class="empty-row">No tickets yet today. <a href="/client_registration">Register the first visitor</a> to start the queue.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -65,7 +65,7 @@
 
     <!--SERVICES VOLUME-->
     <section class="card">
-        <h2 class="card-title">Services Volume (Today)</h2>
+        <h2 class="card-title">Tickets by service</h2>
         <div class="donut-wrap">
             <div class="donut" id="donut">
                 <svg viewBox="0 0 200 200" role="img" aria-label="Share of today's tickets by service"></svg>

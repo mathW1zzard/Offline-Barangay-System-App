@@ -53,13 +53,24 @@
             <p class="ticket-note">Please wait for your number to be called. Thank you!</p>
         </article>
 
+        {#- The likely next step is the primary button and has the focus, so Enter does it: after a good
+            print that is the next visitor; when the slip still needs printing, it is printing. -#}
+        {% set next_visitor = printed == "1" %}
         <div class="confirm-actions no-print">
+            {% if next_visitor %}
+            <a href="/client_registration" class="btn btn-primary btn-block btn-lg" autofocus>{{ icon('user-plus', 20) }}
+                Register the next visitor</a>
+            {% endif %}
             <form action="/client_registration/confirmation/{{ ticket.id }}/print" method="post">
-                <button type="submit" class="btn btn-primary btn-block btn-lg">
+                <button type="submit" class="btn {{ 'btn-outline' if next_visitor else 'btn-primary' }} btn-block btn-lg"
+                    {% if not next_visitor %}autofocus{% endif %}>
                     {{ icon('printer', 20) }} {% if printed in ("0", "1") %}Print again{% else %}Print ticket slip{% endif %}
                 </button>
             </form>
-            <a href="/client_registration" class="btn btn-outline btn-block btn-lg">Register another client</a>
+            {% if not next_visitor %}
+            <a href="/client_registration" class="btn btn-outline btn-block btn-lg">{{ icon('user-plus', 20) }} Register
+                the next visitor</a>
+            {% endif %}
         </div>
     </div>
 </section>

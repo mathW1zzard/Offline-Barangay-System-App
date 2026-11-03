@@ -1,14 +1,11 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, badge, documents_tabs %}
+{% from "_macros.html" import icon, badge, documents_tabs, toast %}
 {% block title %}Documents{% endblock %}
 {% block page_title %}Documents{% endblock %}
 {% block page_subtitle %}Templates{% endblock %}
 {% block description %}The wording of the documents the barangay issues{% endblock %}
+{% block toasts %}{{ toast(message) }}{% endblock %}
 {% block content %}
-{% if message %}
-<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}"
-    role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
-{% endif %}
 
 {{ documents_tabs('templates') }}
 

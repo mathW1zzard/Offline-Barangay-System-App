@@ -1,14 +1,11 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, documents_tabs %}
+{% from "_macros.html" import icon, documents_tabs, toast %}
 {% block title %}Documents{% endblock %}
 {% block page_title %}Documents{% endblock %}
 {% block page_subtitle %}Issue a document{% endblock %}
 {% block description %}Choose the document to issue{% endblock %}
+{% block toasts %}{{ toast(message) }}{% endblock %}
 {% block content %}
-{% if message %}
-<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}"
-    role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
-{% endif %}
 
 {{ documents_tabs('issue') }}
 

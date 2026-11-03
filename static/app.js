@@ -39,6 +39,9 @@
             const variant = trigger.dataset.variant;
             submit.className = 'btn ' + (variant === 'danger' ? 'btn-danger' : variant === 'success' ? 'btn-success' : 'btn-primary');
             confirmDialog.showModal();
+            // Enter confirms a routine action (e.g. Mark complete). For a destructive one the focus
+            // stays on Cancel, so a stray Enter never deletes anything.
+            (variant === 'danger' ? $('[data-close]', confirmDialog) : submit).focus();
             return;
         }
 
@@ -179,6 +182,90 @@
             search.setSelectionRange(search.value.length, search.value.length);
         }
     }
+
+    // ---------- Toasts ----------
+    // Success messages fade after a few seconds (the timer pauses while the pointer is over them);
+    // errors stay until closed.
+    const TOAST_MS = 6000;
+    const dismissToast = (toast) => {
+        toast.classList.add('is-leaving');
+        setTimeout(() => toast.remove(), 220);
+    };
+    $$('.toast').forEach((toast) => {
+        $('.toast-close', toast)?.addEventListener('click', () => dismissToast(toast));
+        if (!toast.hasAttribute('data-autohide')) return;
+        let timer = setTimeout(() => dismissToast(toast), TOAST_MS);
+        toast.addEventListener('mouseenter', () => clearTimeout(timer));
+        toast.addEventListener('mouseleave', () => { timer = setTimeout(() => dismissToast(toast), TOAST_MS / 2); });
+    });
+
+    // ---------- Keyboard shortcuts ----------
+    // A button with data-shortcut="n" is pressed by the N key. Ignored while typing, while a dialog
+    // is open, or with Ctrl/Alt/Cmd held, so normal typing and browser shortcuts are untouched.
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
+        const el = e.target;
+        if (el.closest && el.closest('input, textarea, select, [contenteditable="true"]')) return;
+        if (document.querySelector('dialog[open]')) return;
+        const btn = document.querySelector(`[data-shortcut="${CSS.escape(e.key.toLowerCase())}"]`);
+        if (!btn || btn.disabled || btn.closest('[hidden]')) return;
+        e.preventDefault();
+        btn.click();
+    });
+
+    // ---------- Elapsed time ("waiting 12 min") ----------
+    // The server writes local times without a zone; the browser runs on the same PC, so they match.
+    const LONG_WAIT_MIN = 30;
+    const sinceEls = $$('[data-since]');
+    const formatSince = (mins) => {
+        if (mins < 1) return 'under 1 min';
+        if (mins < 60) return mins + ' min';
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return h + ' h' + (m ? ' ' + m + ' min' : '');
+    };
+    const tickSince = () => {
+        const now = Date.now();
+        sinceEls.forEach((el) => {
+            const start = new Date(el.dataset.since).getTime();
+            if (Number.isNaN(start)) return;
+            const mins = Math.max(0, Math.floor((now - start) / 60000));
+            el.textContent = (el.dataset.prefix || '') + formatSince(mins);
+            el.classList.toggle('is-long', mins >= LONG_WAIT_MIN);
+        });
+    };
+    if (sinceEls.length) {
+        tickSince();
+        setInterval(tickSince, 30000);
+    }
+
+    // ---------- Attendance: quick date ranges ----------
+    // Each button fills From and To and reloads; the button matching the current dates is marked.
+    const isoDate = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const rangeFor = (name) => {
+        const today = new Date();
+        let from = new Date(today);
+        let to = new Date(today);
+        if (name === 'yesterday') {
+            from.setDate(today.getDate() - 1);
+            to = new Date(from);
+        } else if (name === 'week') {
+            from.setDate(today.getDate() - 6);
+        } else if (name === 'month') {
+            from = new Date(today.getFullYear(), today.getMonth(), 1);
+        }
+        return [isoDate(from), isoDate(to)];
+    };
+    $$('[data-range]').forEach((btn) => {
+        const form = btn.closest('form');
+        const [from, to] = rangeFor(btn.dataset.range);
+        btn.setAttribute('aria-pressed', String(form.elements['date_from'].value === from && form.elements['date_to'].value === to));
+        btn.addEventListener('click', () => {
+            form.elements['date_from'].value = from;
+            form.elements['date_to'].value = to;
+            form.submit();
+        });
+    });
 
     // ---------- Services donut chart ----------
     const donut = $('#donut');

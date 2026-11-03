@@ -1,13 +1,11 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon %}
+{% from "_macros.html" import icon, toast %}
 {% block title %}Maintenance{% endblock %}
 {% block page_title %}Maintenance{% endblock %}
 {% block page_subtitle %}Backups and old records{% endblock %}
 {% block description %}Back up the database and purge old attendance records{% endblock %}
+{% block toasts %}{{ toast(message) }}{% endblock %}
 {% block content %}
-{% if message %}
-<div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}" role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
-{% endif %}
 
 <section class="card">
     <h2 class="card-title">Back up the database</h2>

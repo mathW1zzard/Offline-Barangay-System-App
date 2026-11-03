@@ -11,7 +11,7 @@ search}|urlencode %}
 
 <section class="card">
     <div class="section-head">
-        <h2>Client Attendance</h2>
+        <h2>Client attendance</h2>
         <div class="row-actions">
             <a class="btn btn-outline" href="/attendance/export?{{ qs }}" download>{{ icon('download', 18) }} Download
                 attendance</a>
@@ -22,6 +22,13 @@ search}|urlencode %}
 
     <!--FILTERS-->
     <form id="filter-form" method="get" action="/attendance" class="filters">
+        <div class="range-row" role="group" aria-label="Quick date range">
+            <span class="range-label">Show</span>
+            <button type="button" class="range-btn" data-range="today">Today</button>
+            <button type="button" class="range-btn" data-range="yesterday">Yesterday</button>
+            <button type="button" class="range-btn" data-range="week">Last 7 days</button>
+            <button type="button" class="range-btn" data-range="month">This month</button>
+        </div>
         <div class="field">
             <label for="date_from">From date</label>
             <input type="date" name="date_from" id="date_from" value="{{ date_from }}">
@@ -72,19 +79,19 @@ search}|urlencode %}
             <tbody>
                 {% for v in visits %}
                 <tr>
-                    <td>{{ v.created_at.strftime('%m/%d/%Y') }}</td>
-                    <td class="cell-primary">{{ v.ticket_number }}</td>
+                    <td class="cell-num">{{ v.created_at.strftime('%m/%d/%Y') }}</td>
+                    <td class="cell-primary cell-num">{{ v.ticket_number }}</td>
                     <td><span class="cell-primary">{{ v.citizen_name }}</span>{% if v.address %}<span
                             class="cell-sub">{{ v.address }}</span>{% endif %}</td>
                     <td>{{ lane_tag(v.lane) }}</td>
                     <td>{{ v.service_label if v.service else 'Removed service' }}</td>
-                    <td>{{ v.called_at.strftime('%I:%M %p') if v.called_at else '--' }}</td>
-                    <td>{{ v.completed_at.strftime('%I:%M %p') if v.completed_at else '--' }}</td>
+                    <td class="cell-num">{{ v.called_at.strftime('%I:%M %p') if v.called_at else '–' }}</td>
+                    <td class="cell-num">{{ v.completed_at.strftime('%I:%M %p') if v.completed_at else '–' }}</td>
                     <td>{{ badge(v.final_status) }}</td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8" class="empty-row">No records match these filters.</td>
+                    <td colspan="8" class="empty-row">No visits match these filters. Try a wider date range or clear the search.</td>
                 </tr>
                 {% endfor %}
             </tbody>
