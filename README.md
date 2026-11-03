@@ -111,27 +111,20 @@ database.py       models and database upgrades
 run_app.py        desktop launcher
 templates/        pages           static/    CSS, JavaScript, fonts, audio clips
 build.bat         app build       installer.iss   Windows installer script
+make_notices.py   open-source license list (run by build.bat)
 ```
 
-## Team
+## Developer
 
-Developed by **Soft-Tech Builders**, University of La Salette, Inc.
+Developed and maintained by **Jo-Tech-Developer**.
 
-| Developer | Role |
-|---|---|
-| Joseph R. Dionisio | Full Stack Developer |
-| Jhade Lorenz G. Martin | Documentation, Hardware Integration and Testing Support |
-| Katrina Jessica Manzanillo | QA Lead, Client Coordination and Consultation |
+## Open-source licenses
 
-## Acknowledgements
-
-With sincere thanks to the people and communities who made this system possible:
-
-- **Hon. Leo Aguilar Umipig**, Barangay Captain
-- **Mary Joy D. Del Mundo**, Barangay Secretary
-- **Prof. King Christian D. Antonio**, Project adviser
-- **University of La Salette, Inc.**, School
+The app is built with open-source parts. `build.bat` runs `make_notices.py`, which writes
+`THIRD_PARTY_NOTICES.txt` (every part with its full license text, installed next to the program) and
+`third_party_licenses.json` (the short list shown on the About page). The font's license is in
+`static/fonts/OFL.txt`.
 
 ## Contact
 
-Questions, bug reports or support requests: **softtech.builders26@gmail.com**
+Questions, bug reports or support requests: **jotechdeveloper@gmail.com**
