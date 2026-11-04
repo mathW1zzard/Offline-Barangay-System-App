@@ -2708,6 +2708,14 @@ tbody tr.is-current:hover td {
     border-radius: 18px;
 }
 
+.logo-slot .row-actions {
+    flex-direction: column;
+}
+
+.logo-slot .row-actions .btn {
+    width: 100%;
+}
+
 .logo-box {
     height: 120px;
     display: grid;
@@ -3101,7 +3109,8 @@ fieldset.field legend {
 
 .tpl-body .tab {
     display: inline-block;
-    width: 28px;            /* the same width as the automatic indent in the preview */
+    width: 28px;
+    /* the same width as the automatic indent in the preview */
 }
 
 .tpl-signs.single {
