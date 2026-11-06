@@ -5,6 +5,7 @@ from pathlib import Path
 import os, shutil, sqlite3
 from sqlalchemy import event
 from paths import data_path
+import permissions
 
 # Connect to sqlite called tickets.db (automatic create database)
 # Development: the project folder. Packaged app: %LOCALAPPDATA%\BarangayQueue (see paths.py)
@@ -80,13 +81,36 @@ class Visit(Base):
         return self.service.service_name if self.service else "Removed service"
     
 class Admin(Base):
+    """A person who can log in. (The table keeps its old name, so nothing else has to change.)"""
     __tablename__ = "admins"
     
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True)
     password_hash = Column(String)
     recovery_key_hash = Column(String, nullable=True)
-    
+    # Step 9a: staff accounts
+    full_name = Column(String)
+    role_id = Column(Integer, ForeignKey("roles.id"))
+    active = Column(Boolean, nullable=False, default=True, server_default="1")
+    must_change_password = Column(Boolean, nullable=False, default=False, server_default="0")
+    last_login_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.now)
+    role = relationship("Role")
+
+class Role(Base):
+    """A staff role (step 9a). The administrator names it and ticks what it may do (permissions.py).
+    Exactly one role is the built-in Administrator: it can do everything and can't be changed."""
+    __tablename__ = "roles"
+    __table_args__ = (
+        CheckConstraint("length(trim(name)) BETWEEN 1 AND 40", name="ck_roles_name"),
+        CheckConstraint("is_admin IN (0, 1)", name="ck_roles_is_admin"),
+    )
+    id = Column(Integer, primary_key=True)
+    name = Column(String(40, collation="NOCASE"), nullable=False, unique=True)
+    permissions = Column(String, nullable=False, default="", server_default="")   # "register,queue,..."
+    is_admin = Column(Boolean, nullable=False, default=False, server_default="0")
+    created_at = Column(DateTime, default=datetime.now)
+
 class AdminLog(Base):
     __tablename__ = "admin_logs"
 
@@ -467,8 +491,38 @@ def _v7_sign_space(con):
                 "INTEGER NOT NULL DEFAULT 27 "
                 "CONSTRAINT ck_templates_sign_space_mm CHECK (sign_space_mm BETWEEN 12 AND 40)")
 
+def _v8_staff_roles(con):
+    """Step 9a: staff roles. Creates the roles table with the built-in Administrator and the one
+    starter role, Secretary. Every existing account becomes an Administrator, so nobody loses access."""
+    if not _table_exists(con, "roles"):
+        con.execute("""CREATE TABLE roles (
+            id INTEGER NOT NULL PRIMARY KEY,
+            name VARCHAR(40) COLLATE NOCASE NOT NULL UNIQUE,
+            permissions VARCHAR NOT NULL DEFAULT '',
+            is_admin BOOLEAN NOT NULL DEFAULT 0,
+            created_at DATETIME,
+            CONSTRAINT ck_roles_name CHECK (length(trim(name)) BETWEEN 1 AND 40),
+            CONSTRAINT ck_roles_is_admin CHECK (is_admin IN (0, 1)))""")
+    # only one built-in Administrator role, ever
+    con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_roles_one_admin ON roles (is_admin) WHERE is_admin = 1")
+    now = datetime.now().isoformat(sep=" ")
+    if con.execute("SELECT 1 FROM roles WHERE is_admin = 1").fetchone() is None:
+        con.execute("INSERT INTO roles (name, permissions, is_admin, created_at) VALUES (?, '', 1, ?)",
+                    (permissions.ADMIN_ROLE, now))
+    con.execute("INSERT OR IGNORE INTO roles (name, permissions, is_admin, created_at) VALUES (?, ?, 0, ?)",
+                (permissions.SECRETARY_ROLE, permissions.dump(permissions.SECRETARY), now))
+    _add_column(con, "admins", "full_name", "VARCHAR")
+    _add_column(con, "admins", "role_id", "INTEGER REFERENCES roles (id)")
+    _add_column(con, "admins", "active", "BOOLEAN NOT NULL DEFAULT 1")
+    _add_column(con, "admins", "must_change_password", "BOOLEAN NOT NULL DEFAULT 0")
+    _add_column(con, "admins", "last_login_at", "DATETIME")
+    _add_column(con, "admins", "created_at", "DATETIME")
+    admin_role = con.execute("SELECT id FROM roles WHERE is_admin = 1").fetchone()[0]
+    con.execute("UPDATE admins SET role_id = ? WHERE role_id IS NULL", (admin_role,))
+    con.execute("UPDATE admins SET full_name = username WHERE full_name IS NULL OR trim(full_name) = ''")
+    
 MIGRATIONS = [_v1_counters_and_indexes, _v2_documents_settings_address, _v3_legacy_logo_flag, _v4_wording_options,
-              _v5_pictures_and_design, _v6_spacing, _v7_sign_space]
+              _v5_pictures_and_design, _v6_spacing, _v7_sign_space, _v8_staff_roles]
 LATEST = len(MIGRATIONS)
 
 def _has_table(db_file, name):
