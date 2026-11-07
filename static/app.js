@@ -149,6 +149,19 @@
         });
     }
 
+    // Role form: Add OR and Void need View issued documents (the server enforces this too)
+    document.addEventListener('change', (e) => {
+        const box = e.target;
+        if (!box.matches || !box.matches('.role-form input[name="perm"]')) return;
+        if (box.checked && box.dataset.needs) {
+            const needed = $(`.role-form input[name="perm"][value="${box.dataset.needs}"]`);
+            if (needed) needed.checked = true;
+        }
+        if (!box.checked) {
+            $$(`.role-form input[name="perm"][data-needs="${box.value}"]`).forEach((d) => { d.checked = false; });
+        }
+    });
+
     // ---------- Password reveal switch ----------
     $$('.pw-toggle').forEach((toggle) => {
         toggle.addEventListener('change', () => {

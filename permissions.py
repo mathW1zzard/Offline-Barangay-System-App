@@ -28,6 +28,10 @@ PERMISSIONS = [
 KEYS = tuple(p[1] for p in PERMISSIONS)
 LABELS = {p[1]: p[2] for p in PERMISSIONS}
 
+# Some permissions only work together with another one: Add OR and Void are buttons on the
+# Issued documents list, so they need View issued documents. Saving a role adds it automatically.
+NEEDS = {"add_or": "view_issued", "void": "view_issued"}
+
 ADMIN_ROLE = "Administrator"
 # Not a tick box: only the built-in Administrator role has it (Staff accounts and Roles).
 ADMIN_ONLY = "admin_only"
@@ -47,6 +51,13 @@ FALLBACK_HOME = "/about"           # a role with nothing ticked can still open A
 def parse(text) -> frozenset:
     """Saved text ("register,queue") -> the set of known permission keys. Unknown keys are dropped."""
     return frozenset(k for k in (text or "").split(",") if k in KEYS)
+
+
+def with_needs(keys) -> frozenset:
+    """The ticked keys plus whatever they need (see NEEDS)."""
+    keys = set(keys)
+    keys |= {NEEDS[k] for k in keys if k in NEEDS}
+    return frozenset(keys)
 
 
 def dump(keys) -> str:

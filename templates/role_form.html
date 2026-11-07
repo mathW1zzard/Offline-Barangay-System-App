@@ -23,10 +23,11 @@
         {% for group, items in groups.items() %}
         <fieldset class="perm-group">
             <legend>{{ group }}</legend>
-            {% for key, label, help in items %}
+            {% for key, label, help, needs, needs_label in items %}
             <label class="perm-row">
-                <input type="checkbox" name="perm" value="{{ key }}" {{ 'checked' if key in keys }}>
-                <span><strong>{{ label }}</strong><small>{{ help }}</small></span>
+                <input type="checkbox" name="perm" value="{{ key }}" {{ 'checked' if key in keys }}
+                    {% if needs %}data-needs="{{ needs }}"{% endif %}>
+                <span><strong>{{ label }}</strong><small>{{ help }}{% if needs %} (also needs {{ needs_label }}){% endif %}</small></span>
             </label>
             {% endfor %}
         </fieldset>

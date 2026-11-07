@@ -30,8 +30,8 @@
         <div class="row-actions">
             <a class="btn btn-sm btn-outline" href="/staff/roles/{{ r.id }}/edit">{{ icon('pencil', 16) }} Edit</a>
             {% if c.people %}
-            <button type="button" class="btn btn-sm btn-danger-outline" disabled
-                title="Give its {{ c.people }} {{ 'account' if c.people == 1 else 'accounts' }} another role first">{{ icon('trash', 16) }} Delete</button>
+            {#- In use: Delete explains who still has the role instead of deleting -#}
+            <button type="button" class="btn btn-sm btn-danger-outline" data-open-modal="in-use-{{ r.id }}">{{ icon('trash', 16) }} Delete</button>
             {% else %}
             <button type="button" class="btn btn-sm btn-danger-outline" data-confirm
                 data-action="/staff/roles/{{ r.id }}/delete"
@@ -44,4 +44,29 @@
     </section>
     {% endfor %}
 </div>
+{% endblock %}
+
+{% block dialogs %}
+{#- "Can't be deleted yet": one per role that is still given to someone -#}
+{% for c in cards if c.people and not c.role.is_admin %}
+<dialog class="modal" id="in-use-{{ c.role.id }}">
+    <div class="modal-body">
+        <h2>{{ c.role.name }} can't be deleted yet</h2>
+        <p class="modal-text">{{ 'This account still has' if c.people == 1 else 'These accounts still have' }} this role.
+            Give {{ 'it' if c.people == 1 else 'each of them' }} another role first, then come back and delete it.</p>
+        <ul class="holder-list">
+            {% for a in c.holders %}
+            <li>
+                <strong>{{ a.full_name or a.username }}</strong>
+                <span>{{ a.username }}{% if not a.active %} &middot; turned off{% endif %}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-close>Close</button>
+            <a class="btn btn-primary" href="/staff">Go to Staff accounts</a>
+        </div>
+    </div>
+</dialog>
+{% endfor %}
 {% endblock %}

@@ -2130,7 +2130,8 @@ def role_form_error(db, name: str, keys: frozenset, role_id: int | None = None) 
 def render_role_form(request: Request, role_id, name: str, keys, error: str | None = None, people: int = 0):
     groups = {}
     for group, key, label, help_ in perms.PERMISSIONS:
-        groups.setdefault(group, []).append((key, label, help_))
+        needs = perms.NEEDS.get(key)
+        groups.setdefault(group, []).append((key, label, help_, needs, perms.LABELS[needs] if needs else ""))
     return templates.TemplateResponse(request, "role_form.html", {
         "role_id": role_id, "name": name, "keys": set(keys), "groups": groups, "error": error, "people": people,
     }, status_code=400 if error else 200)
@@ -2141,8 +2142,11 @@ def show_roles(request: Request):
     message = request.session.pop("flash", None)
     with SessionLocal() as db:
         roles = db.query(Role).order_by(Role.is_admin.desc(), Role.name).all()
-        counts = dict(db.query(Admin.role_id, func.count(Admin.id)).group_by(Admin.role_id).all())
-    cards = [{"role": r, "people": counts.get(r.id, 0),
+        accounts = db.query(Admin).all()
+    holders = {}                     # who has each role, for "can't be deleted yet" (turned-off accounts too)
+    for a in sorted(accounts, key=lambda a: (not a.active, (a.full_name or a.username).lower())):
+        holders.setdefault(a.role_id, []).append(a)
+    cards = [{"role": r, "people": len(holders.get(r.id, [])), "holders": holders.get(r.id, []),
               "labels": [perms.LABELS[k] for k in perms.KEYS if k in perms.parse(r.permissions)]} for r in roles]
     return templates.TemplateResponse(request, "roles.html", {"cards": cards, "message": message})
 
@@ -2154,7 +2158,7 @@ def new_role_form(request: Request):
 
 @app.post("/staff/roles/new", dependencies=[Depends(admin_required)])
 def add_role(request: Request, name: str = Form(""), perm: list[str] = Form([])):
-    name, keys = clean_text(name, 40), perms.parse(",".join(perm))
+    name, keys = clean_text(name, 40), perms.with_needs(perms.parse(",".join(perm)))
     with SessionLocal() as db:
         error = role_form_error(db, name, keys)
         if error:
@@ -2181,7 +2185,7 @@ def edit_role_form(request: Request, role_id: int):
 
 @app.post("/staff/roles/{role_id}/edit", dependencies=[Depends(admin_required)])
 def save_role(request: Request, role_id: int, name: str = Form(""), perm: list[str] = Form([])):
-    name, keys = clean_text(name, 40), perms.parse(",".join(perm))
+    name, keys = clean_text(name, 40), perms.with_needs(perms.parse(",".join(perm)))
     with SessionLocal() as db:
         role = db.get(Role, role_id)
         if role is None or role.is_admin:

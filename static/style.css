@@ -3738,6 +3738,35 @@ tr.is-off .cell-primary {
     color: var(--muted);
 }
 
+/* Roles: who still has a role that can't be deleted yet */
+.holder-list {
+    display: grid;
+    gap: 8px;
+    margin: 0 0 18px;
+    padding: 0;
+    list-style: none;
+}
+
+.holder-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+
+.holder-list strong {
+    color: var(--text);
+}
+
+.holder-list span {
+    color: var(--muted);
+    font-size: 14px;
+    text-align: right;
+}
+
 .link-button {
     padding: 0;
     border: 0;
