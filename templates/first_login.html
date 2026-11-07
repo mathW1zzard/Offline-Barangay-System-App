@@ -1,0 +1,32 @@
+{% extends "auth_base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Choose your password{% endblock %}
+{% block badge %}{{ icon('key', 26) }}{% endblock %}
+{% block heading %}Welcome, {{ full_name }}{% endblock %}
+{% block description %}To replace a temporary password{% endblock %}
+{% block intro %}<p class="auth-intro">You logged in with a temporary password. Choose your own password now. Only you will know it.</p>{% endblock %}
+{% block body %}
+        <form action="/first-login" method="post" class="form">
+            <div class="field">
+                <label for="new_password">New password</label>
+                <input type="password" name="new_password" id="new_password" autocomplete="new-password" data-pw required autofocus>
+            </div>
+            <div class="field">
+                <label for="confirm_password">Confirm new password</label>
+                <input type="password" name="confirm_password" id="confirm_password" autocomplete="new-password" data-pw required>
+            </div>
+
+            <label class="switch-row">
+                <input type="checkbox" class="pw-toggle switch-input">
+                <span class="switch" aria-hidden="true"></span>
+                <span>Show password</span>
+            </label>
+
+            <p class="hint">Use at least 8 characters. Next, you'll get your own recovery key.</p>
+
+            <button type="submit" class="btn btn-primary btn-block">Save my password</button>
+        </form>
+        <form action="/logout" method="post" class="auth-foot">
+            <button type="submit" class="link-button">Not you? Log out</button>
+        </form>
+{% endblock %}

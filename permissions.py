@@ -29,6 +29,8 @@ KEYS = tuple(p[1] for p in PERMISSIONS)
 LABELS = {p[1]: p[2] for p in PERMISSIONS}
 
 ADMIN_ROLE = "Administrator"
+# Not a tick box: only the built-in Administrator role has it (Staff accounts and Roles).
+ADMIN_ONLY = "admin_only"
 # The one starter role a new or upgraded installation gets. The administrator can edit or delete it.
 SECRETARY_ROLE = "Secretary"
 SECRETARY = ("register", "queue", "issue", "view_issued", "add_or", "void", "templates",

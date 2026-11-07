@@ -130,6 +130,25 @@
         });
     }
 
+    // Edit staff account: one dialog, filled with the row's values (step 9b)
+    const staffDialog = $('#edit-staff-modal');
+    if (staffDialog) {
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-edit-staff]');
+            if (!btn) return;
+            $('#edit-staff-form').action = '/staff/' + btn.dataset.id + '/edit';
+            $('#edit-staff-username').textContent = btn.dataset.username;
+            $('#edit-full-name').value = btn.dataset.name;
+            const role = $('#edit-role');
+            role.value = btn.dataset.role;
+            // Your own Administrator role stays: only that choice is offered
+            const lockSelf = Boolean(btn.dataset.self && btn.dataset.admin);
+            $$('option', role).forEach((o) => { o.disabled = lockSelf && !o.dataset.adminRole; });
+            $('#edit-role-self').hidden = !lockSelf;
+            staffDialog.showModal();
+        });
+    }
+
     // ---------- Password reveal switch ----------
     $$('.pw-toggle').forEach((toggle) => {
         toggle.addEventListener('change', () => {

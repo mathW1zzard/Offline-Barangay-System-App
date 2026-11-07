@@ -46,6 +46,7 @@
                 ]),
                 ('Setup', [
                 ('/services', 'Services', 'landmark', ['services']),
+                ('/staff', 'Staff accounts', 'users', ['admin_only']),
                 ('/settings', 'Settings', 'sliders', ['settings']),
                 ('/maintenance', 'Maintenance', 'database', ['maintenance']),
                 ('/about', 'About', 'info', []),
@@ -131,11 +132,11 @@
                             admin_initials(request) }}</button>
 
                         <div class="menu" id="user-menu" role="menu">
-                            {% set me = request.state.user %}
-                            {% if me %}
+                            {% set signed_in = request.state.user %}
+                            {% if signed_in %}
                             <div class="menu-who">
-                                <strong>{{ me.full_name }}</strong>
-                                <span>{{ me.role_name }}</span>
+                                <strong>{{ signed_in.full_name }}</strong>
+                                <span>{{ signed_in.role_name }}</span>
                             </div>
                             {% endif %}
                             <a href="/change-password" role="menuitem">{{ icon('key', 18) }} Change password</a>

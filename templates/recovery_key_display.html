@@ -2,9 +2,9 @@
 {% from "_macros.html" import icon %}
 {% block title %}New recovery key{% endblock %}
 {% block badge %}{{ icon('key', 26) }}{% endblock %}
-{% block heading %}Save your new recovery key{% endblock %}
+{% block heading %}Save your {{ 'new ' if not intro }}recovery key{% endblock %}
 {% block description %}To save new recovery key{% endblock %}
-{% block intro %}<p class="auth-intro">Your password was reset and the old recovery key no longer works. This new key is the only way back in if you are ever locked out again. It will not be shown again.</p>{% endblock %}
+{% block intro %}<p class="auth-intro">{{ intro or "Your password was reset and the old recovery key no longer works. This new key is the only way back in if you are ever locked out again. It will not be shown again." }}</p>{% endblock %}
 {% block body %}
         <div class="recovery-key" aria-label="Recovery key">{{ recovery_key }}</div>
 
@@ -13,6 +13,6 @@
             <span>I have written down or printed this key and stored it somewhere safe</span>
         </label>
 
-        <a href="/login" id="proceedLink" class="btn btn-primary btn-block is-disabled" aria-disabled="true" tabindex="-1">Continue to sign in</a>
+        <a href="{{ next_url or '/login' }}" id="proceedLink" class="btn btn-primary btn-block is-disabled" aria-disabled="true" tabindex="-1">{{ next_label or 'Continue to sign in' }}</a>
         <p class="footer"> Copyright &#169; {{ copyright_year }} {{ app_owner }}, All rights reserved</p>
 {% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, toast, staff_tabs %}
+{% block title %}Roles{% endblock %}
+{% block page_title %}Staff accounts{% endblock %}
+{% block page_subtitle %}Who can log in, and what each person may do{% endblock %}
+{% block description %}To manage the staff roles{% endblock %}
+{% block toasts %}{{ toast(message) }}{% endblock %}
+{% block content %}
+{{ staff_tabs('roles') }}
+
+<div class="section-head">
+    <h2>Roles</h2>
+    <a class="btn btn-primary" href="/staff/roles/new">{{ icon('plus', 18) }} Add role</a>
+</div>
+
+<div class="role-grid">
+    {% for c in cards %}
+    {% set r = c.role %}
+    <section class="card role-card">
+        <div class="role-card-head">
+            <h3>{{ r.name }}</h3>
+            <span class="staff-chip">{{ c.people }} {{ 'account' if c.people == 1 else 'accounts' }}</span>
+        </div>
+        {% if r.is_admin %}
+        <p class="role-note">{{ icon('lock', 16) }} Built in. Can do everything, including Staff accounts and Roles. It can't be changed or deleted.</p>
+        {% else %}
+        <ul class="role-perms">
+            {% for label in c.labels %}<li>{{ icon('check', 14) }} {{ label }}</li>{% endfor %}
+        </ul>
+        <div class="row-actions">
+            <a class="btn btn-sm btn-outline" href="/staff/roles/{{ r.id }}/edit">{{ icon('pencil', 16) }} Edit</a>
+            {% if c.people %}
+            <button type="button" class="btn btn-sm btn-danger-outline" disabled
+                title="Give its {{ c.people }} {{ 'account' if c.people == 1 else 'accounts' }} another role first">{{ icon('trash', 16) }} Delete</button>
+            {% else %}
+            <button type="button" class="btn btn-sm btn-danger-outline" data-confirm
+                data-action="/staff/roles/{{ r.id }}/delete"
+                data-title="Delete the role {{ r.name }}?"
+                data-message="No account has this role, so nobody is affected."
+                data-label="Delete role" data-variant="danger">{{ icon('trash', 16) }} Delete</button>
+            {% endif %}
+        </div>
+        {% endif %}
+    </section>
+    {% endfor %}
+</div>
+{% endblock %}

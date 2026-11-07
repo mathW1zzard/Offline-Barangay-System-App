@@ -44,6 +44,7 @@ from time import monotonic
 from urllib.parse import urlparse, urlencode
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 
 # For authentication(recovery key)
 import secrets
@@ -170,7 +171,7 @@ def current_priority_streak(db) -> int:
 THROTTLE_MAX_FAILURES, THROTTLE_WINDOW_SECONDS = 5, 60
 
 # ADMIN LOGS
-LOG_CATEGORIES = ["Queue", "Service", "Settings", "Security", "Database", "Documents"]
+LOG_CATEGORIES = ["Queue", "Service", "Settings", "Security", "Database", "Documents", "Staff"]
 NOT_SIGNED_IN = "(not signed in)" # who gets blamed for failed logins
 
 # SESSION TRACKING (so the audit log can record a session that ended by closing the app)
@@ -780,6 +781,14 @@ def show_setup(request: Request):
 
 def normalize_username(value: str) -> str:
     return clean_text(value, 50)
+
+
+def find_account(db, username: str):
+    """The account with this username, ignoring capital letters ("Ana.Cruz" finds "ana.cruz")."""
+    if not username:
+        return None
+    return (db.query(Admin).filter(func.lower(Admin.username) == username.lower())
+            .order_by(Admin.id).first())
  
 @app.post("/setup")
 def process_setup(request: Request, username: str = Form(...), password: str = Form(...), confirm_password: str = Form(...)):
@@ -839,7 +848,7 @@ def process_login(request: Request, username: str = Form(...), password: str = F
             {"error": f"Too many failed attempts. Try again in {wait} seconds."}, status_code=429)
 
     with SessionLocal() as db:
-        admin = db.query(Admin).filter(Admin.username == username).first()
+        admin = find_account(db, username)
 
     if not check_password(password, admin.password_hash if admin else None):
         record_failure("login")
@@ -862,6 +871,8 @@ def process_login(request: Request, username: str = Form(...), password: str = F
     request.session["pwv"] = password_fingerprint(admin.password_hash)
     active_admin_id = admin.id
     log_action("Security", "Login", "Signed in", username=admin.username)
+    if admin.must_change_password:
+        return RedirectResponse(url="/first-login", status_code=303)
     keys = perms.parse(role.permissions) if role else frozenset()
     home = perms.home_page(keys, bool(role and role.is_admin))
     return RedirectResponse(url=home if branding.is_setup_complete() else "/wizard", status_code=303)
@@ -887,7 +898,7 @@ def process_forgot_password(
 
     error, new_recovery_key = None, None
     with SessionLocal() as db:
-        admin = db.query(Admin).filter(Admin.username == username).first()
+        admin = find_account(db, username)
         stored = admin.recovery_key_hash if admin else None
         if not check_password(recovery_key.strip().upper(), stored):
             error = "Invalid username or recovery key"
@@ -901,6 +912,7 @@ def process_forgot_password(
             admin.password_hash = hash_password(new_password)
             admin.recovery_key_hash = hash_password(new_recovery_key)
             db.commit()          # `admin` is still attached to `db` here, so this really saves
+            username = admin.username            # as saved, for the audit log
 
     if error:
         if error.startswith("Invalid"):
@@ -943,13 +955,14 @@ async def setup_required_handler(request: Request, exc: SetupRequired):
 class StaffUser:
     """The person signed in for this request, with their role (read fresh on every request, so a
     change the administrator makes applies on that person's next click)."""
-    __slots__ = ("id", "username", "full_name", "role_name", "is_admin", "perms")
+    __slots__ = ("id", "username", "full_name", "role_name", "is_admin", "perms", "must_change")
 
     def __init__(self, admin: Admin, role: Role):
         self.id, self.username = admin.id, admin.username
         self.full_name = (admin.full_name or admin.username or "").strip()
         self.role_name, self.is_admin = role.name, bool(role.is_admin)
         self.perms = frozenset(perms.KEYS) if self.is_admin else perms.parse(role.permissions)
+        self.must_change = bool(admin.must_change_password)
 
 
 def check_signed_in(request: Request):
@@ -974,12 +987,23 @@ def login_required(request: Request):
     """Every normal page: signed in AND the first-run setup finished. Pages anyone signed in may
     open (About, Change password, pictures) use this alone; every other page uses require()."""
     check_signed_in(request)
+    if request.state.user.must_change:
+        raise FirstLoginRequired()
     if not branding.is_setup_complete():
         raise SetupRequired()
 
 
 class NotAllowed(Exception):
     pass
+
+
+class FirstLoginRequired(Exception):
+    """Signed in with a temporary password: choosing their own comes before anything else."""
+
+
+@app.exception_handler(FirstLoginRequired)
+async def first_login_handler(request: Request, exc: FirstLoginRequired):
+    return RedirectResponse(url="/first-login", status_code=303)
 
 
 @app.exception_handler(NotAllowed)
@@ -992,7 +1016,11 @@ async def not_allowed_handler(request: Request, exc: NotAllowed):
 def can(request: Request, key: str) -> bool:
     """True if the person signed in may do `key` (a key from permissions.py). Used by templates too."""
     user = getattr(request.state, "user", None)
-    return bool(user) and (user.is_admin or key in user.perms)
+    if not user:
+        return False
+    if key == perms.ADMIN_ONLY:
+        return user.is_admin
+    return user.is_admin or key in user.perms
 
 
 def home_url(request: Request) -> str:
@@ -1028,6 +1056,8 @@ def require(*keys: str):
 def wizard_login(request: Request):
     """The wizard's own pages: signed in as an Administrator, without the setup gate (they ARE the setup)."""
     check_signed_in(request)
+    if request.state.user.must_change:
+        raise FirstLoginRequired()
     if not request.state.user.is_admin:
         raise NotAllowed()
 
@@ -1918,6 +1948,328 @@ def delete_service(request: Request, service_id: int):
     if log_entry:
         log_action("Service", log_entry[0], log_entry[1], request)
     return RedirectResponse(url="/services", status_code=303)
+
+# STAFF ACCOUNTS AND ROLES (step 9b). The built-in Administrator role only.
+# People are never deleted, only turned off: their name stays on issued documents and in the audit log.
+
+# Easy to read aloud and copy from paper. Used once: the person must replace it at first login.
+TEMP_WORDS = ("Tala", "Bituin", "Ulap", "Dagat", "Bundok", "Ilog", "Araw", "Buwan", "Hangin", "Puno",
+              "Bulaklak", "Palay", "Niyog", "Mangga", "Sampaguita", "Narra", "Agila", "Maya", "Perlas", "Bahaghari")
+USERNAME_RULE = re.compile(r"[a-z0-9][a-z0-9._-]{2,29}")
+
+
+def make_temp_password() -> str:
+    """Like "Tala-4827": a word, a dash and four digits."""
+    return f"{secrets.choice(TEMP_WORDS)}-{secrets.randbelow(10000):04d}"
+
+
+def active_admin_count(db, excluding_id: int | None = None) -> int:
+    """How many active accounts have the Administrator role (optionally not counting one person)."""
+    q = (db.query(Admin).join(Role, Admin.role_id == Role.id)
+         .filter(Role.is_admin.is_(True), Admin.active.is_(True)))
+    if excluding_id is not None:
+        q = q.filter(Admin.id != excluding_id)
+    return q.count()
+
+
+def staff_label(person: Admin) -> str:
+    """For messages and the audit log: "Ana R. Cruz (ana.cruz)"."""
+    return f"{person.full_name or person.username} ({person.username})"
+
+
+def staff_back(request: Request, ok: bool, text_: str, url: str = "/staff"):
+    flash(request, ok, text_)
+    return RedirectResponse(url=url, status_code=303)
+
+
+@app.get("/staff", dependencies=[Depends(admin_required)])
+def show_staff(request: Request):
+    message = request.session.pop("flash", None)
+    with SessionLocal() as db:
+        people = db.query(Admin).options(joinedload(Admin.role)).all()
+        roles = db.query(Role).order_by(Role.is_admin.desc(), Role.name).all()
+    people.sort(key=lambda p: (not p.active, not (p.role and p.role.is_admin), (p.full_name or p.username).lower()))
+    per_role = {r.id: sum(1 for p in people if p.role_id == r.id and p.active) for r in roles}
+    new_role = next((r for r in roles if r.name == perms.SECRETARY_ROLE), None) or next((r for r in roles if not r.is_admin), None)
+    return templates.TemplateResponse(request, "staff.html", {
+        "people": people, "roles": roles, "per_role": per_role, "message": message,
+        "turned_off": sum(1 for p in people if not p.active),
+        "default_role_id": new_role.id if new_role else roles[0].id,
+        "my_id": request.state.user.id,
+    })
+
+
+@app.post("/staff/add", dependencies=[Depends(admin_required)])
+def add_staff(request: Request, full_name: str = Form(""), username: str = Form(""), role_id: str = Form("")):
+    name = clean_text(full_name, 60)
+    user = clean_text(username, 30).lower()
+    with SessionLocal() as db:
+        role = db.get(Role, parse_optional_int(role_id) or 0)
+        if not name:
+            return staff_back(request, False, "Type the person's full name.")
+        if not USERNAME_RULE.fullmatch(user):
+            return staff_back(request, False, "The username needs 3 to 30 small letters or numbers, "
+                                              "and may use a dot, dash or underscore (for example ana.cruz).")
+        if find_account(db, user):
+            return staff_back(request, False, f'The username "{user}" is already taken. Choose another one.')
+        if role is None:
+            return staff_back(request, False, "Choose a role.")
+        temp = make_temp_password()
+        person = Admin(username=user, full_name=name, role_id=role.id, active=True, must_change_password=True,
+                       password_hash=hash_password(temp), recovery_key_hash=None)
+        db.add(person)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            return staff_back(request, False, f'The username "{user}" is already taken. Choose another one.')
+        role_name = role.name
+    log_action("Staff", "Staff Account Added", f"Added {name} ({user}) as {role_name}", request)
+    # Shown once, straight from this response; the password is never stored anywhere readable.
+    return templates.TemplateResponse(request, "staff_password.html", {
+        "full_name": name, "username": user, "password": temp, "is_new": True})
+
+
+@app.post("/staff/{person_id}/edit", dependencies=[Depends(admin_required)])
+def edit_staff(request: Request, person_id: int, full_name: str = Form(""), role_id: str = Form("")):
+    name = clean_text(full_name, 60)
+    me = request.state.user.id
+    with SessionLocal() as db:
+        person = db.get(Admin, person_id)
+        role = db.get(Role, parse_optional_int(role_id) or 0)
+        if person is None:
+            return staff_back(request, False, "That account no longer exists.")
+        if not name:
+            return staff_back(request, False, "Type the person's full name.")
+        if role is None:
+            return staff_back(request, False, "Choose a role.")
+        old_role = db.get(Role, person.role_id) if person.role_id else None
+        losing_admin = bool(old_role and old_role.is_admin and not role.is_admin)
+        if losing_admin and person.id == me:
+            return staff_back(request, False, "You can't take the Administrator role away from yourself. "
+                                              "Another administrator can do it.")
+        if losing_admin and person.active and active_admin_count(db, excluding_id=person.id) == 0:
+            return staff_back(request, False, "At least one active account must keep the Administrator role.")
+        changes = []
+        if name != (person.full_name or ""):
+            changes.append(f'name "{person.full_name}" to "{name}"')
+        if role.id != person.role_id:
+            changes.append(f"role {old_role.name if old_role else 'none'} to {role.name}")
+        if not changes:
+            return staff_back(request, True, "Nothing changed.")
+        person.full_name, person.role_id = name, role.id
+        db.commit()
+        label = staff_label(person)
+    log_action("Staff", "Staff Account Changed", f"{label}: changed " + "; ".join(changes), request)
+    return staff_back(request, True, f"Saved the changes to {name}.")
+
+
+@app.post("/staff/{person_id}/reset-password", dependencies=[Depends(admin_required)])
+def reset_staff_password(request: Request, person_id: int):
+    if person_id == request.state.user.id:
+        return staff_back(request, False, "To change your own password, use Change password in your account menu.")
+    with SessionLocal() as db:
+        person = db.get(Admin, person_id)
+        if person is None:
+            return staff_back(request, False, "That account no longer exists.")
+        temp = make_temp_password()
+        person.password_hash = hash_password(temp)      # also signs them out wherever they are signed in
+        person.must_change_password = True
+        db.commit()
+        name, user, label, active = person.full_name or person.username, person.username, staff_label(person), person.active
+    log_action("Staff", "Password Reset by Administrator", f"Gave {label} a new temporary password", request)
+    return templates.TemplateResponse(request, "staff_password.html", {
+        "full_name": name, "username": user, "password": temp, "is_new": False, "turned_off": not active})
+
+
+@app.post("/staff/{person_id}/turn-off", dependencies=[Depends(admin_required)])
+def turn_off_staff(request: Request, person_id: int):
+    if person_id == request.state.user.id:
+        return staff_back(request, False, "You can't turn off your own account.")
+    with SessionLocal() as db:
+        person = db.get(Admin, person_id)
+        if person is None or not person.active:
+            return staff_back(request, True, "That account is already turned off.")
+        role = db.get(Role, person.role_id) if person.role_id else None
+        if role and role.is_admin and active_admin_count(db, excluding_id=person.id) == 0:
+            return staff_back(request, False, "At least one active account must keep the Administrator role.")
+        person.active = False
+        db.commit()
+        label, name = staff_label(person), person.full_name or person.username
+    log_action("Staff", "Staff Account Turned Off", f"Turned off {label}", request)
+    return staff_back(request, True, f"{name} can no longer log in. Their records stay as they are.")
+
+
+@app.post("/staff/{person_id}/turn-on", dependencies=[Depends(admin_required)])
+def turn_on_staff(request: Request, person_id: int):
+    with SessionLocal() as db:
+        person = db.get(Admin, person_id)
+        if person is None or person.active:
+            return staff_back(request, True, "That account is already turned on.")
+        person.active = True
+        db.commit()
+        label, name = staff_label(person), person.full_name or person.username
+    log_action("Staff", "Staff Account Turned On", f"Turned on {label}", request)
+    return staff_back(request, True, f"{name} can log in again with their current password.")
+
+
+# ---- Roles
+def role_form_error(db, name: str, keys: frozenset, role_id: int | None = None) -> str | None:
+    if not name:
+        return "Give the role a name, for example Front desk or Treasurer."
+    clash = db.query(Role).filter(func.lower(Role.name) == name.lower())
+    if role_id is not None:
+        clash = clash.filter(Role.id != role_id)
+    if clash.first() is not None:
+        return f'There is already a role called "{name}". Choose another name.'
+    if not keys:
+        return "Tick at least one thing this role may do."
+    return None
+
+
+def render_role_form(request: Request, role_id, name: str, keys, error: str | None = None, people: int = 0):
+    groups = {}
+    for group, key, label, help_ in perms.PERMISSIONS:
+        groups.setdefault(group, []).append((key, label, help_))
+    return templates.TemplateResponse(request, "role_form.html", {
+        "role_id": role_id, "name": name, "keys": set(keys), "groups": groups, "error": error, "people": people,
+    }, status_code=400 if error else 200)
+
+
+@app.get("/staff/roles", dependencies=[Depends(admin_required)])
+def show_roles(request: Request):
+    message = request.session.pop("flash", None)
+    with SessionLocal() as db:
+        roles = db.query(Role).order_by(Role.is_admin.desc(), Role.name).all()
+        counts = dict(db.query(Admin.role_id, func.count(Admin.id)).group_by(Admin.role_id).all())
+    cards = [{"role": r, "people": counts.get(r.id, 0),
+              "labels": [perms.LABELS[k] for k in perms.KEYS if k in perms.parse(r.permissions)]} for r in roles]
+    return templates.TemplateResponse(request, "roles.html", {"cards": cards, "message": message})
+
+
+@app.get("/staff/roles/new", dependencies=[Depends(admin_required)])
+def new_role_form(request: Request):
+    return render_role_form(request, None, "", ())
+
+
+@app.post("/staff/roles/new", dependencies=[Depends(admin_required)])
+def add_role(request: Request, name: str = Form(""), perm: list[str] = Form([])):
+    name, keys = clean_text(name, 40), perms.parse(",".join(perm))
+    with SessionLocal() as db:
+        error = role_form_error(db, name, keys)
+        if error:
+            return render_role_form(request, None, name, keys, error)
+        db.add(Role(name=name, permissions=perms.dump(keys), is_admin=False))
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            return render_role_form(request, None, name, keys, f'There is already a role called "{name}".')
+    log_action("Staff", "Role Added", f"Added the role {name}: " + ", ".join(perms.LABELS[k] for k in perms.KEYS if k in keys), request)
+    return staff_back(request, True, f"Added the role {name}. You can now give it to staff accounts.", "/staff/roles")
+
+
+@app.get("/staff/roles/{role_id}/edit", dependencies=[Depends(admin_required)])
+def edit_role_form(request: Request, role_id: int):
+    with SessionLocal() as db:
+        role = db.get(Role, role_id)
+        if role is None or role.is_admin:
+            return staff_back(request, False, "The Administrator role can't be changed.", "/staff/roles")
+        people = db.query(Admin).filter(Admin.role_id == role.id).count()
+        return render_role_form(request, role.id, role.name, perms.parse(role.permissions), people=people)
+
+
+@app.post("/staff/roles/{role_id}/edit", dependencies=[Depends(admin_required)])
+def save_role(request: Request, role_id: int, name: str = Form(""), perm: list[str] = Form([])):
+    name, keys = clean_text(name, 40), perms.parse(",".join(perm))
+    with SessionLocal() as db:
+        role = db.get(Role, role_id)
+        if role is None or role.is_admin:
+            return staff_back(request, False, "The Administrator role can't be changed.", "/staff/roles")
+        people = db.query(Admin).filter(Admin.role_id == role.id).count()
+        error = role_form_error(db, name, keys, role.id)
+        if error:
+            return render_role_form(request, role.id, name, keys, error, people)
+        old_name, old_keys = role.name, perms.parse(role.permissions)
+        role.name, role.permissions = name, perms.dump(keys)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            return render_role_form(request, role.id, name, keys, f'There is already a role called "{name}".', people)
+    changes = []
+    if name != old_name:
+        changes.append(f'renamed from "{old_name}"')
+    added = [perms.LABELS[k] for k in perms.KEYS if k in keys - old_keys]
+    removed = [perms.LABELS[k] for k in perms.KEYS if k in old_keys - keys]
+    if added:
+        changes.append("added " + ", ".join(added))
+    if removed:
+        changes.append("removed " + ", ".join(removed))
+    if not changes:
+        return staff_back(request, True, "Nothing changed.", "/staff/roles")
+    log_action("Staff", "Role Changed", f"{name}: " + "; ".join(changes), request)
+    return staff_back(request, True, f"Saved {name}. People with this role see the change on their next click.", "/staff/roles")
+
+
+@app.post("/staff/roles/{role_id}/delete", dependencies=[Depends(admin_required)])
+def delete_role(request: Request, role_id: int):
+    with SessionLocal() as db:
+        role = db.get(Role, role_id)
+        if role is None:
+            return staff_back(request, True, "That role is already gone.", "/staff/roles")
+        if role.is_admin:
+            return staff_back(request, False, "The Administrator role can't be deleted.", "/staff/roles")
+        people = db.query(Admin).filter(Admin.role_id == role.id).count()
+        if people:
+            return staff_back(request, False, f"{role.name} is still given to {people} "
+                              f"{'account' if people == 1 else 'accounts'} (turned-off ones count too). "
+                              "Give them another role first.", "/staff/roles")
+        name = role.name
+        db.delete(role)
+        db.commit()
+    log_action("Staff", "Role Deleted", f"Deleted the role {name}", request)
+    return staff_back(request, True, f"Deleted the role {name}.", "/staff/roles")
+
+
+# ---- First login: replace the temporary password, then get a personal recovery key
+@app.get("/first-login")
+def show_first_login(request: Request):
+    check_signed_in(request)
+    if not request.state.user.must_change:
+        return RedirectResponse(url=home_url(request), status_code=303)
+    return templates.TemplateResponse(request, "first_login.html", {"full_name": request.state.user.full_name})
+
+
+@app.post("/first-login")
+def process_first_login(request: Request, new_password: str = Form(""), confirm_password: str = Form("")):
+    check_signed_in(request)
+    me = request.state.user
+    if not me.must_change:
+        return RedirectResponse(url=home_url(request), status_code=303)
+    with SessionLocal() as db:
+        admin = db.get(Admin, me.id)
+        error = validate_new_password(new_password, confirm_password)
+        if not error and check_password(new_password, admin.password_hash):
+            error = "Choose a password that is different from the temporary one."
+        if error:
+            return templates.TemplateResponse(request, "first_login.html",
+                                              {"full_name": me.full_name, "error": error}, status_code=400)
+        recovery_key = generate_recovery_key()
+        admin.password_hash = hash_password(new_password)
+        admin.recovery_key_hash = hash_password(recovery_key)
+        admin.must_change_password = False
+        db.commit()
+        request.session["pwv"] = password_fingerprint(admin.password_hash)   # stays signed in
+        me.must_change = False
+    log_action("Security", "First Login Completed", "Chose their own password and received a recovery key", request)
+    return templates.TemplateResponse(request, "recovery_key_display.html", {
+        "recovery_key": recovery_key,
+        "intro": "Your password is set. If you ever forget it, this key lets you choose a new one from the "
+                 "login screen. Only you have it: the administrator can't see it. It will not be shown again.",
+        "next_url": home_url(request), "next_label": "Continue to the app",
+    })
+
 
 # AUDIT LOGS
 @app.get("/audit_logs", dependencies=[Depends(require("audit"))])

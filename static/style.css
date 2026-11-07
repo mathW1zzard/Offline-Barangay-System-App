@@ -3490,3 +3490,263 @@ fieldset.field legend {
         grid-template-columns: 1fr;
     }
 }
+/* ---------- Staff accounts and roles (step 9b) ---------- */
+.staff-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.staff-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--slate-tint);
+    color: var(--slate-ink);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.staff-chip strong {
+    color: var(--text);
+}
+
+.staff-chip.is-off {
+    background: var(--bg-sunken);
+    color: var(--muted);
+}
+
+.staff-name {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+td.nowrap {
+    white-space: nowrap;
+}
+
+.you-tag {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--orange-soft);
+    color: var(--orange-ink);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+tr.is-off td {
+    color: var(--muted);
+}
+
+tr.is-off .cell-primary {
+    color: var(--muted);
+}
+
+.badge-first_login {
+    background: var(--amber-tint);
+    color: var(--amber-ink);
+    --dot: var(--amber);
+}
+
+.staff-hint {
+    margin-top: 14px;
+}
+
+.temp-pass {
+    max-width: 640px;
+    margin: 24px auto;
+    text-align: center;
+}
+
+.temp-pass .no-access-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--orange-soft);
+    color: var(--orange);
+    margin-bottom: 12px;
+}
+
+.temp-pass .card-title {
+    justify-content: center;
+}
+
+.temp-pass>p {
+    color: var(--muted);
+}
+
+.temp-pass-details {
+    display: grid;
+    gap: 10px;
+    margin: 20px 0;
+    text-align: left;
+}
+
+.temp-pass-details div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    border: 2px dashed var(--faint);
+    border-radius: 14px;
+    background: var(--bg);
+}
+
+.temp-pass-details dt {
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.temp-pass-details dd {
+    margin: 0;
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+.temp-pass .check-row {
+    justify-content: center;
+    margin: 18px 0;
+}
+
+.role-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.role-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.role-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.role-card-head h3 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--heading);
+}
+
+.role-note {
+    display: flex;
+    gap: 8px;
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+.role-note .icon {
+    flex: none;
+    margin-top: 3px;
+}
+
+.role-perms {
+    display: grid;
+    align-content: start;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    flex: 1;
+}
+
+.role-perms li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.role-perms .icon {
+    color: var(--green);
+    flex: none;
+}
+
+.role-form {
+    max-width: 760px;
+}
+
+.perm-group {
+    margin: 6px 0 0;
+    padding: 0;
+    border: 0;
+}
+
+.perm-group legend {
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.perm-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+}
+
+.perm-row:hover {
+    background: var(--bg);
+}
+
+.perm-row:has(input:checked) {
+    border-color: var(--orange);
+    background: var(--orange-soft);
+}
+
+.perm-row input {
+    width: 20px;
+    height: 20px;
+    margin-top: 2px;
+    accent-color: var(--orange);
+    flex: none;
+}
+
+.perm-row strong {
+    display: block;
+    color: var(--text);
+}
+
+.perm-row small {
+    display: block;
+    margin-top: 2px;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.link-button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--orange-ink);
+    font: inherit;
+    cursor: pointer;
+}
+
+.link-button:hover {
+    text-decoration: underline;
+}

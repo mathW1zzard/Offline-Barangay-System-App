@@ -3,7 +3,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"
     aria-hidden="true">
-    {%- if name == 'shield' -%}
+    {%- if name == 'users' -%}
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    {%- elif name == 'shield' -%}
     <path
         d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
     {%- elif name == 'dashboard' -%}
@@ -121,7 +126,7 @@
     <rect width="20" height="16" x="2" y="4" rx="2" />
     <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
     {%- elif name == 'app-icon' -%}
-    <img src="../static/app-icon.png" alt="app icon"
+    <img src="/static/app-icon.png" alt="app icon"
         style="position: absolute;  width: 40px; height: 40px; border-radius: 14px;">
     {%- elif name == 'moon' -%}
     <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
@@ -240,6 +245,16 @@ page script can fill it in. -#}
             <label class="color-option color-own">Own colour <input type="color" data-color-own value="#000000"></label>
         </div>
     </div>
+    {%- endmacro %}
+
+    {#- The two tabs of Staff accounts (step 9b). -#}
+    {% macro staff_tabs(active) -%}
+    <nav class="doc-tabs" aria-label="Staff accounts">
+        <a class="doc-tab{{ ' active' if active == 'people' }}" href="/staff" {% if active=='people' %}
+            aria-current="page" {% endif %}>Staff accounts</a>
+        <a class="doc-tab{{ ' active' if active == 'roles' }}" href="/staff/roles" {% if active=='roles' %}
+            aria-current="page" {% endif %}>Roles</a>
+    </nav>
     {%- endmacro %}
 
     {#- The three tabs of the Documents section. -#}

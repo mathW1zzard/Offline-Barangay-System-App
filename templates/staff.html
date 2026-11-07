@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, badge, toast, staff_tabs %}
+{% block title %}Staff accounts{% endblock %}
+{% block page_title %}Staff accounts{% endblock %}
+{% block page_subtitle %}Who can log in, and what each person may do{% endblock %}
+{% block description %}To manage the staff accounts{% endblock %}
+{% block toasts %}{{ toast(message) }}{% endblock %}
+{% block content %}
+{{ staff_tabs('people') }}
+
+<div class="section-head">
+    <div class="staff-summary" aria-label="People per role">
+        {% for r in roles %}
+        <span class="staff-chip">{{ r.name }} <strong>{{ per_role[r.id] }}</strong></span>
+        {% endfor %}
+        {% if turned_off %}<span class="staff-chip is-off">Turned off <strong>{{ turned_off }}</strong></span>{% endif %}
+    </div>
+    <button type="button" class="btn btn-primary" data-open-modal="add-modal">{{ icon('user-plus', 18) }} Add staff account</button>
+</div>
+
+<section class="card">
+    <h2 class="card-title">Everyone who can log in</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Last login</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in people %}
+                {% set mine = p.id == my_id %}
+                <tr class="{{ 'is-off' if not p.active }}">
+                    <td>
+                        <span class="staff-name"><span class="cell-primary">{{ p.full_name or p.username }}</span>{% if mine %}<span class="you-tag">You</span>{% endif %}</span>
+                        <span class="cell-sub">{{ p.username }}</span>
+                    </td>
+                    <td>{{ p.role.name if p.role else '--' }}</td>
+                    <td>
+                        {% if not p.active %}{{ badge('inactive', 'Turned off') }}
+                        {% elif p.must_change_password %}{{ badge('first_login', 'Waiting for first login') }}
+                        {% else %}{{ badge('active', 'Active') }}{% endif %}
+                    </td>
+                    <td class="nowrap">{{ p.last_login_at.strftime('%m/%d/%Y %I:%M %p') if p.last_login_at else 'Never' }}</td>
+                    <td>
+                        <div class="row-actions">
+                            <button type="button" class="btn btn-sm btn-outline" data-edit-staff
+                                data-id="{{ p.id }}" data-name="{{ p.full_name or '' }}" data-username="{{ p.username }}"
+                                data-role="{{ p.role_id or '' }}" data-self="{{ '1' if mine else '' }}"
+                                data-admin="{{ '1' if p.role and p.role.is_admin else '' }}">{{ icon('pencil', 16) }} Edit</button>
+                            {% if not mine %}
+                            <button type="button" class="btn btn-sm btn-outline" data-confirm
+                                data-action="/staff/{{ p.id }}/reset-password"
+                                data-title="Give {{ p.full_name or p.username }} a new temporary password?"
+                                data-message="Use this when they forgot their password and lost their recovery key. Their current password stops working at once, and the app shows you a new temporary password to give them."
+                                data-label="Make new password">{{ icon('key', 16) }} Reset password</button>
+                            {% if p.active %}
+                            <button type="button" class="btn btn-sm btn-danger-outline" data-confirm
+                                data-action="/staff/{{ p.id }}/turn-off"
+                                data-title="Turn off {{ p.full_name or p.username }}'s account?"
+                                data-message="They can't log in until you turn the account back on. Nothing is deleted: their name stays on the documents they issued and in the audit log."
+                                data-label="Turn off" data-variant="danger">{{ icon('user-x', 16) }} Turn off</button>
+                            {% else %}
+                            <button type="button" class="btn btn-sm btn-outline" data-confirm
+                                data-action="/staff/{{ p.id }}/turn-on"
+                                data-title="Turn {{ p.full_name or p.username }}'s account back on?"
+                                data-message="They can log in again with their current password."
+                                data-label="Turn on" data-variant="success">{{ icon('check', 16) }} Turn on</button>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="hint staff-hint">Accounts are never deleted, only turned off, so every issued document and audit log entry still shows who did it.</p>
+</section>
+{% endblock %}
+
+{% block dialogs %}
+<!-- ADD STAFF ACCOUNT -->
+<dialog class="modal" id="add-modal">
+    <form action="/staff/add" method="post" class="modal-body">
+        <h2>Add staff account</h2>
+        <p class="modal-text">The app makes a temporary password for this person. On their first login they choose their own password and get their own recovery key.</p>
+        <div class="field">
+            <label for="add-full-name">Full name</label>
+            <input type="text" name="full_name" id="add-full-name" maxlength="60" placeholder="e.g. Ana R. Cruz" required>
+        </div>
+        <div class="field">
+            <label for="add-username">Username</label>
+            <input type="text" name="username" id="add-username" maxlength="30" placeholder="e.g. ana.cruz"
+                autocomplete="off" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9][A-Za-z0-9._\-]{2,29}" required>
+            <p class="hint">What they type to log in. Small letters and numbers; a dot, dash or underscore is fine.</p>
+        </div>
+        <div class="field">
+            <label for="add-role">Role</label>
+            <select name="role_id" id="add-role">
+                {% for r in roles %}<option value="{{ r.id }}" {{ 'selected' if r.id == default_role_id }}>{{ r.name }}</option>{% endfor %}
+            </select>
+            <p class="hint">What this person may do. See the Roles tab.</p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-close>Cancel</button>
+            <button type="submit" class="btn btn-primary">Add account</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- EDIT STAFF ACCOUNT (one dialog, filled in by app.js) -->
+<dialog class="modal" id="edit-staff-modal">
+    <form method="post" id="edit-staff-form" class="modal-body">
+        <h2>Edit <span id="edit-staff-username"></span></h2>
+        <p class="modal-text">A new role applies on the person's next click. The username can't be changed, so the audit log stays easy to follow.</p>
+        <div class="field">
+            <label for="edit-full-name">Full name</label>
+            <input type="text" name="full_name" id="edit-full-name" maxlength="60" required>
+        </div>
+        <div class="field">
+            <label for="edit-role">Role</label>
+            <select name="role_id" id="edit-role">
+                {% for r in roles %}<option value="{{ r.id }}" data-admin-role="{{ '1' if r.is_admin else '' }}">{{ r.name }}</option>{% endfor %}
+            </select>
+            <p class="hint" id="edit-role-self" hidden>You can't take the Administrator role away from yourself.</p>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-close>Cancel</button>
+            <button type="submit" class="btn btn-primary">Save changes</button>
+        </div>
+    </form>
+</dialog>
+{% endblock %}
