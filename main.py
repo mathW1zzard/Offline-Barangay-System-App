@@ -2127,19 +2127,14 @@ def role_form_error(db, name: str, keys: frozenset, role_id: int | None = None) 
     return None
 
 
-def render_role_form(request: Request, role_id, name: str, keys, error: str | None = None, people: int = 0):
+def roles_page(request: Request, message=None, reopen: dict | None = None):
+    """The Roles tab. Add role and Edit role are pop-up forms on it. `reopen` opens one of them on
+    arrival: {"id": "new" or a role id}, plus "name", "keys" and "error" when a save was refused,
+    so the person sees what went wrong with their name and ticks still filled in."""
     groups = {}
     for group, key, label, help_ in perms.PERMISSIONS:
         needs = perms.NEEDS.get(key)
         groups.setdefault(group, []).append((key, label, help_, needs, perms.LABELS[needs] if needs else ""))
-    return templates.TemplateResponse(request, "role_form.html", {
-        "role_id": role_id, "name": name, "keys": set(keys), "groups": groups, "error": error, "people": people,
-    }, status_code=400 if error else 200)
-
-
-@app.get("/staff/roles", dependencies=[Depends(admin_required)])
-def show_roles(request: Request):
-    message = request.session.pop("flash", None)
     with SessionLocal() as db:
         roles = db.query(Role).order_by(Role.is_admin.desc(), Role.name).all()
         accounts = db.query(Admin).all()
@@ -2147,13 +2142,29 @@ def show_roles(request: Request):
     for a in sorted(accounts, key=lambda a: (not a.active, (a.full_name or a.username).lower())):
         holders.setdefault(a.role_id, []).append(a)
     cards = [{"role": r, "people": len(holders.get(r.id, [])), "holders": holders.get(r.id, []),
+              "keys": perms.parse(r.permissions),
               "labels": [perms.LABELS[k] for k in perms.KEYS if k in perms.parse(r.permissions)]} for r in roles]
-    return templates.TemplateResponse(request, "roles.html", {"cards": cards, "message": message})
+    return templates.TemplateResponse(request, "roles.html", {
+        "cards": cards, "message": message, "groups": groups, "reopen": reopen or {},
+    }, status_code=400 if reopen and reopen.get("error") else 200)
+
+
+@app.get("/staff/roles", dependencies=[Depends(admin_required)])
+def show_roles(request: Request):
+    message = request.session.pop("flash", None)
+    which = request.query_params.get("open", "")          # /staff/roles?open=new or ?open=<role id>
+    reopen = {"id": "new"} if which == "new" else ({"id": int(which)} if which.isdigit() else None)
+    return roles_page(request, message, reopen)
+
+
+def refused(request: Request, role_id, name: str, keys, error: str):
+    """A save that can't go through: back to the Roles tab with that pop-up open again."""
+    return roles_page(request, reopen={"id": role_id, "name": name, "keys": set(keys), "error": error})
 
 
 @app.get("/staff/roles/new", dependencies=[Depends(admin_required)])
 def new_role_form(request: Request):
-    return render_role_form(request, None, "", ())
+    return RedirectResponse(url="/staff/roles?open=new", status_code=303)
 
 
 @app.post("/staff/roles/new", dependencies=[Depends(admin_required)])
@@ -2162,13 +2173,13 @@ def add_role(request: Request, name: str = Form(""), perm: list[str] = Form([]))
     with SessionLocal() as db:
         error = role_form_error(db, name, keys)
         if error:
-            return render_role_form(request, None, name, keys, error)
+            return refused(request, "new", name, keys, error)
         db.add(Role(name=name, permissions=perms.dump(keys), is_admin=False))
         try:
             db.commit()
         except IntegrityError:
             db.rollback()
-            return render_role_form(request, None, name, keys, f'There is already a role called "{name}".')
+            return refused(request, "new", name, keys, f'There is already a role called "{name}".')
     log_action("Staff", "Role Added", f"Added the role {name}: " + ", ".join(perms.LABELS[k] for k in perms.KEYS if k in keys), request)
     return staff_back(request, True, f"Added the role {name}. You can now give it to staff accounts.", "/staff/roles")
 
@@ -2179,8 +2190,7 @@ def edit_role_form(request: Request, role_id: int):
         role = db.get(Role, role_id)
         if role is None or role.is_admin:
             return staff_back(request, False, "The Administrator role can't be changed.", "/staff/roles")
-        people = db.query(Admin).filter(Admin.role_id == role.id).count()
-        return render_role_form(request, role.id, role.name, perms.parse(role.permissions), people=people)
+    return RedirectResponse(url=f"/staff/roles?open={role_id}", status_code=303)
 
 
 @app.post("/staff/roles/{role_id}/edit", dependencies=[Depends(admin_required)])
@@ -2190,17 +2200,16 @@ def save_role(request: Request, role_id: int, name: str = Form(""), perm: list[s
         role = db.get(Role, role_id)
         if role is None or role.is_admin:
             return staff_back(request, False, "The Administrator role can't be changed.", "/staff/roles")
-        people = db.query(Admin).filter(Admin.role_id == role.id).count()
         error = role_form_error(db, name, keys, role.id)
         if error:
-            return render_role_form(request, role.id, name, keys, error, people)
+            return refused(request, role.id, name, keys, error)
         old_name, old_keys = role.name, perms.parse(role.permissions)
         role.name, role.permissions = name, perms.dump(keys)
         try:
             db.commit()
         except IntegrityError:
             db.rollback()
-            return render_role_form(request, role.id, name, keys, f'There is already a role called "{name}".', people)
+            return refused(request, role.id, name, keys, f'There is already a role called "{name}".')
     changes = []
     if name != old_name:
         changes.append(f'renamed from "{old_name}"')

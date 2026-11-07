@@ -3679,10 +3679,6 @@ tr.is-off .cell-primary {
     flex: none;
 }
 
-.role-form {
-    max-width: 760px;
-}
-
 .perm-group {
     margin: 6px 0 0;
     padding: 0;
@@ -3736,6 +3732,30 @@ tr.is-off .cell-primary {
     margin-top: 2px;
     font-size: 14px;
     color: var(--muted);
+}
+
+/* Add role / Edit role pop-up: the buttons stay in view while the ticks scroll */
+.role-modal {
+    max-width: 640px;
+}
+
+.role-modal .modal-body {
+    gap: 14px;
+    padding-bottom: 0;
+}
+
+.role-modal .perm-row {
+    padding: 8px 12px;
+    margin-bottom: 6px;
+}
+
+.role-modal-actions {
+    position: sticky;
+    bottom: 0;
+    margin: 0 -28px;
+    padding: 14px 28px 22px;
+    background: var(--card);
+    border-top: 1px solid var(--line);
 }
 
 /* Roles: who still has a role that can't be deleted yet */

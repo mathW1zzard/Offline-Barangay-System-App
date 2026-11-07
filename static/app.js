@@ -149,18 +149,54 @@
         });
     }
 
-    // Role form: Add OR and Void need View issued documents (the server enforces this too)
+    // ---------- Role pop-ups (Staff accounts > Roles) ----------
+    // Add OR and Void need View issued documents (the server enforces this too)
     document.addEventListener('change', (e) => {
         const box = e.target;
-        if (!box.matches || !box.matches('.role-form input[name="perm"]')) return;
+        if (!box.matches || !box.matches('[data-role-form] input[name="perm"]')) return;
+        const form = box.closest('form');
         if (box.checked && box.dataset.needs) {
-            const needed = $(`.role-form input[name="perm"][value="${box.dataset.needs}"]`);
+            const needed = $(`input[name="perm"][value="${box.dataset.needs}"]`, form);
             if (needed) needed.checked = true;
         }
         if (!box.checked) {
-            $$(`.role-form input[name="perm"][data-needs="${box.value}"]`).forEach((d) => { d.checked = false; });
+            $$(`input[name="perm"][data-needs="${box.value}"]`, form).forEach((d) => { d.checked = false; });
         }
     });
+
+    $$('[data-role-form]').forEach((form) => {
+        const error = $('[data-role-error]', form);
+        const showError = (text) => {
+            error.textContent = text;
+            error.hidden = false;
+            error.scrollIntoView({ block: 'nearest' });
+        };
+        // Say what's missing before sending, so the pop-up stays open with the ticks in place
+        form.addEventListener('submit', (e) => {
+            if (!form.elements.name.value.trim()) {
+                e.preventDefault();
+                showError('Give the role a name, for example Front desk or Treasurer.');
+                form.elements.name.focus();
+            } else if (!$('input[name="perm"]:checked', form)) {
+                e.preventDefault();
+                showError('Tick at least one thing this role may do.');
+            }
+        });
+        // Cancel (or Esc) forgets unsaved changes: next time it opens as saved
+        const dialog = form.closest('dialog');
+        dialog.addEventListener('close', () => {
+            if (dialog.hasAttribute('data-refused')) {     // came back refused: show the saved roles again
+                location.replace('/staff/roles');
+                return;
+            }
+            form.reset();
+            error.hidden = true;
+        });
+    });
+
+    // A save the server refused comes back with its pop-up open again
+    const reopen = $('dialog[data-open-on-load]');
+    if (reopen) reopen.showModal();
 
     // ---------- Password reveal switch ----------
     $$('.pw-toggle').forEach((toggle) => {
