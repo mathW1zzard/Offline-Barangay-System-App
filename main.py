@@ -8,10 +8,11 @@ from fastapi import File, UploadFile
 from fastapi.responses import RedirectResponse, Response, FileResponse, JSONResponse
 from app_logging import setup_logging, log
 setup_logging()
-from database import SessionLocal, Ticket, Service, Visit, Admin, AdminLog, engine, DocumentTemplate, IssuedDocument
+from database import SessionLocal, Ticket, Service, Visit, Admin, AdminLog, Role, engine, DocumentTemplate, IssuedDocument
 from database import LATEST as DB_LATEST
 from paths import resource_path, data_path, DATA_DIR
 import branding
+import permissions as perms
 import doc_templates
 import documents
 import pictures
@@ -225,10 +226,11 @@ def log_action(category: str, action: str, description: str = "", request: Reque
     except Exception:
         log.exception("Audit log failed")
 
-def log_action_throttled(request: Request, category: str, action: str, description: str, seconds: int = 60):
-    """Log at most once per `seconds` per session for the same action (refreshing a page is not a new event)."""
+def log_action_throttled(request: Request, category: str, action: str, description: str, seconds: int = 60, about: str = ""):
+    """Log at most once per `seconds` per session for the same action (refreshing a page is not a new event).
+    `about` keeps separate limits for separate things, e.g. each refused page gets its own entry."""
     now = datetime.now().timestamp()
-    key = f"last_log_{action}"
+    key = f"last_log_{action}{about}"
     if now - request.session.get(key, 0) < seconds:
         return
     request.session[key] = now
@@ -802,7 +804,9 @@ def process_setup(request: Request, username: str = Form(...), password: str = F
 
             return RedirectResponse(url="/login", status_code=303)
             
-        new_admin = Admin(username=username, password_hash=hash_password(password), recovery_key_hash=hash_password(recovery_key))
+        admin_role = db.query(Role).filter(Role.is_admin.is_(True)).first()
+        new_admin = Admin(username=username, full_name=username, role_id=admin_role.id, active=True,
+                          password_hash=hash_password(password), recovery_key_hash=hash_password(recovery_key))
         db.add(new_admin)
         db.commit()
         
@@ -844,13 +848,23 @@ def process_login(request: Request, username: str = Form(...), password: str = F
         return templates.TemplateResponse(request, "login.html", {"error": "Invalid username or password"})
 
     clear_failures("login")
+    if not admin.active:
+        log_action("Security", "Login Blocked", "Tried to sign in to a turned-off account", username=admin.username)
+        return templates.TemplateResponse(request, "login.html",
+            {"error": "This account is turned off. Ask the administrator to turn it back on."}, status_code=403)
+    with SessionLocal() as db:
+        db.query(Admin).filter(Admin.id == admin.id).update({"last_login_at": datetime.now()})
+        db.commit()
+        role = db.get(Role, admin.role_id) if admin.role_id else None
     global active_admin_id
     request.session.clear()
     request.session["admin_id"] = admin.id
     request.session["pwv"] = password_fingerprint(admin.password_hash)
     active_admin_id = admin.id
     log_action("Security", "Login", "Signed in", username=admin.username)
-    return RedirectResponse(url="/dashboard", status_code=303)
+    keys = perms.parse(role.permissions) if role else frozenset()
+    home = perms.home_page(keys, bool(role and role.is_admin))
+    return RedirectResponse(url=home if branding.is_setup_complete() else "/wizard", status_code=303)
 
 
 @app.get("/forgot-password")
@@ -877,6 +891,8 @@ def process_forgot_password(
         stored = admin.recovery_key_hash if admin else None
         if not check_password(recovery_key.strip().upper(), stored):
             error = "Invalid username or recovery key"
+        elif not admin.active:
+            error = "This account is turned off. Ask the administrator to turn it back on."
         else:
             error = validate_new_password(new_password, confirm_password)
 
@@ -923,16 +939,29 @@ class SetupRequired(Exception):
 async def setup_required_handler(request: Request, exc: SetupRequired):
     return RedirectResponse(url="/wizard", status_code=303)
 
+class StaffUser:
+    """The person signed in for this request, with their role (read fresh on every request, so a
+    change the administrator makes applies on that person's next click)."""
+    __slots__ = ("id", "username", "full_name", "role_name", "is_admin", "perms")
 
+    def __init__(self, admin: Admin, role: Role):
+        self.id, self.username = admin.id, admin.username
+        self.full_name = (admin.full_name or admin.username or "").strip()
+        self.role_name, self.is_admin = role.name, bool(role.is_admin)
+        self.perms = frozenset(perms.KEYS) if self.is_admin else perms.parse(role.permissions)
+        
 def check_signed_in(request: Request):
     admin_id = request.session.get("admin_id")
     if not admin_id:
         raise NotAuthenticated()
     with SessionLocal() as db:
         admin = db.get(Admin, admin_id)
-        valid = (admin is not None
+        role = db.get(Role, admin.role_id) if admin is not None and admin.role_id else None
+        valid = (admin is not None and admin.active and role is not None
                  and request.session.get("pwv") == password_fingerprint(admin.password_hash))
-    if not valid:                         # account deleted, or password changed/reset elsewhere
+        if valid:
+            request.state.user = StaffUser(admin, role)
+    if not valid:                         # account deleted or turned off, or password changed/reset elsewhere
         request.session.clear()
         raise NotAuthenticated()
     global active_admin_id
@@ -940,21 +969,72 @@ def check_signed_in(request: Request):
     ensure_daily_rollover()
     
 def login_required(request: Request):
-    """Every normal page: signed in AND the first-run setup finished."""
+    """Every normal page: signed in AND the first-run setup finished. Pages anyone signed in may
+    open (About, Change password, pictures) use this alone; every other page uses require()."""
     check_signed_in(request)
     if not branding.is_setup_complete():
         raise SetupRequired()
 
 
+class NotAllowed(Exception):
+    pass
+
+
+@app.exception_handler(NotAllowed)
+async def not_allowed_handler(request: Request, exc: NotAllowed):
+    user = getattr(request.state, "user", None)
+    return templates.TemplateResponse(request, "no_access.html",
+        {"role": user.role_name if user else "", "home": home_url(request)}, status_code=403)
+
+
+def can(request: Request, key: str) -> bool:
+    """True if the person signed in may do `key` (a key from permissions.py). Used by templates too."""
+    user = getattr(request.state, "user", None)
+    return bool(user) and (user.is_admin or key in user.perms)
+
+
+def home_url(request: Request) -> str:
+    """The first page this person's role allows (where they land after logging in)."""
+    user = getattr(request.state, "user", None)
+    return perms.home_page(user.perms, user.is_admin) if user else "/login"
+
+
+def can_any(request: Request, keys) -> bool:
+    """True if the role allows any of `keys`; an empty list means everyone signed in (the sidebar uses this)."""
+    return not keys or any(can(request, k) for k in keys)
+
+
+templates.env.globals.update(can=can, can_any=can_any, home_url=home_url)
+
+
+def require(*keys: str):
+    """A page's guard: signed in, setup finished, and the role allows at least one of `keys`.
+    Usage: @app.get("/attendance", dependencies=[Depends(require("attendance"))])"""
+    unknown = [k for k in keys if k not in perms.KEYS]
+    if unknown:
+        raise ValueError(f"Unknown permission {unknown}")      # a typo fails at start-up, not silently
+
+    def check(request: Request):
+        login_required(request)
+        if not any(can(request, k) for k in keys):
+            log_action_throttled(request, "Security", "Access Denied", f"Tried to open {request.url.path[:80]}",
+                                 about=":" + "/".join(keys))
+            raise NotAllowed()
+    return check
+
+
 def wizard_login(request: Request):
-    """The wizard's own pages: signed in, but without the setup gate (they ARE the setup)."""
+    """The wizard's own pages: signed in as an Administrator, without the setup gate (they ARE the setup)."""
     check_signed_in(request)
-    
-    
+    if not request.state.user.is_admin:
+        raise NotAllowed()
+
+
 def admin_required(request: Request):
-    """Settings is for the administrator only. Today the one account IS the administrator, so this
-    just checks the sign-in. When staff accounts arrive, the role check goes here and nowhere else."""
+    """Staff accounts and roles: the built-in Administrator role only (no tick box can give this)."""
     login_required(request)
+    if not request.state.user.is_admin:
+        raise NotAllowed()
 
 @app.get("/change-password", dependencies=[Depends(login_required)])
 def show_change_password(request: Request):
@@ -1060,17 +1140,18 @@ def get_current_admin(request: Request):
 def admin_initials(request: Request):
     """Two-letter avatar text from the signed-in username (e.g. admin.secretary -> AS)."""
     admin = get_current_admin(request)
-    if not admin or not admin.username:
+    name = (admin.full_name or admin.username) if admin else ""
+    if not name:
         return "AD"
-    parts = [p for p in re.split(r"[._\s-]+", admin.username) if p]
+    parts = [p for p in re.split(r"[._\s-]+", name) if p and p[0].isalnum()]
     if len(parts) >= 2:
-        return (parts[0][0] + parts[1][0]).upper()
-    return admin.username[:2].upper()
+        return (parts[0][0] + parts[-1][0]).upper()
+    return name[:2].upper()
 
 
 templates.env.globals["admin_initials"] = admin_initials
 
-@app.get("/dashboard", dependencies=[Depends(login_required)])
+@app.get("/dashboard", dependencies=[Depends(require("dashboard"))])
 def show_dashboard(request: Request):
     with SessionLocal() as db:
         
@@ -1146,7 +1227,7 @@ def show_dashboard(request: Request):
         })
         return response
 
-@app.get("/client_registration", dependencies=[Depends(login_required)])
+@app.get("/client_registration", dependencies=[Depends(require("register"))])
 def show_registration(request: Request):
     return render_registration(request)
 
@@ -1182,7 +1263,7 @@ def queue_snapshot() -> dict:
         "waiting_regular": waiting_regular
     }
 
-@app.post("/register", dependencies=[Depends(login_required)])
+@app.post("/register", dependencies=[Depends(require("register"))])
 def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = Form(""), service_id: str = Form(""), address: str = Form("")):
     form = {"citizen_name": citizen_name, "lane": lane, "service_id": service_id, "address": address}
     name, sid = clean_text(citizen_name, 100), parse_optional_int(service_id)
@@ -1221,7 +1302,7 @@ def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = 
     notify_display_update()
     return RedirectResponse(url=url, status_code=303)
 
-@app.get("/client_registration/confirmation/{ticket_id}", dependencies=[Depends(login_required)])
+@app.get("/client_registration/confirmation/{ticket_id}", dependencies=[Depends(require("register"))])
 def show_ticket_confirmation(request: Request, ticket_id: int, printed: str = ""):
     """printed: "1" = sent to the printer, "0" = the printer failed, "" = not printed yet."""
     db = SessionLocal()
@@ -1238,7 +1319,7 @@ def show_ticket_confirmation(request: Request, ticket_id: int, printed: str = ""
         db.close()
 
 
-@app.post("/client_registration/confirmation/{ticket_id}/print", dependencies=[Depends(login_required)])
+@app.post("/client_registration/confirmation/{ticket_id}/print", dependencies=[Depends(require("register"))])
 def print_ticket_again(request: Request, ticket_id: int):
     db = SessionLocal()
     try:
@@ -1266,7 +1347,7 @@ def issue_ticket_number(db, lane: str) -> str:
         {"day": date.today().isoformat(), "lane": lane}).scalar_one()
     return f"{lane}-{n:03d}"
 
-@app.post("/tickets/delete/{ticket_id}", dependencies=[Depends(login_required)])
+@app.post("/tickets/delete/{ticket_id}", dependencies=[Depends(require("register"))])
 def delete_ticket(request: Request, ticket_id: int):
     """Remove a ticket from the live queue. Nothing is written to attendance history."""
     with SessionLocal() as db:
@@ -1281,7 +1362,7 @@ def delete_ticket(request: Request, ticket_id: int):
     return RedirectResponse(url="/client_registration", status_code=303)
 
 # QUEUE MANAGEMENT
-@app.get("/queue_management", dependencies=[Depends(login_required)])
+@app.get("/queue_management", dependencies=[Depends(require("queue"))])
 def show_queue(request: Request):
     if "announce" in request.query_params:        # the announcement now comes from the session, never the URL
         return RedirectResponse(url="/queue_management", status_code=303)
@@ -1308,7 +1389,7 @@ def show_queue(request: Request):
         prepare = None
         linked_id = current_ticket.service.document_template_id if current_ticket and current_ticket.service else None
         linked = db.get(DocumentTemplate, linked_id) if linked_id else None
-        if linked and linked.is_active:
+        if linked and linked.is_active and can(request, "issue"):
             prepare = {"url": f"/documents/issue/{linked.id}?ticket={current_ticket.id}", "name": linked.name}
             
         announce = request.session.pop("announce", None)        # one-shot: gone after this page load
@@ -1335,7 +1416,7 @@ def show_queue(request: Request):
 
 
 # LIVE PANEL
-@app.post("/call-next/{ticket_id}", dependencies=[Depends(login_required)])
+@app.post("/call-next/{ticket_id}", dependencies=[Depends(require("queue"))])
 def call_next(request: Request, ticket_id: int):
     upcoming = get_incoming_order(limit=1)
     if not upcoming:
@@ -1433,7 +1514,7 @@ def _stamp() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")   # same format SQLAlchemy stores
 
 
-@app.post("/skip/{ticket_id}", dependencies=[Depends(login_required)])
+@app.post("/skip/{ticket_id}", dependencies=[Depends(require("queue"))])
 def skip_ticket(request: Request, ticket_id: int):
     
     with SessionLocal() as db:
@@ -1447,7 +1528,7 @@ def skip_ticket(request: Request, ticket_id: int):
     return RedirectResponse(url="/queue_management", status_code=303)
 
 
-@app.post("/recall/{ticket_id}", dependencies=[Depends(login_required)])
+@app.post("/recall/{ticket_id}", dependencies=[Depends(require("queue"))])
 def recall_ticket(request: Request, ticket_id: int):
     with SessionLocal() as db:
         claimed = db.execute(_CLAIM, {"id": ticket_id, "from_status": "skipped", "now": _stamp(), "today_start": _today_start_str()}).rowcount == 1
@@ -1460,7 +1541,7 @@ def recall_ticket(request: Request, ticket_id: int):
     notify_display_update()
     return RedirectResponse(url="/queue_management", status_code=303)
 
-@app.post("/complete/{ticket_id}", dependencies=[Depends(login_required)])
+@app.post("/complete/{ticket_id}", dependencies=[Depends(require("queue"))])
 def complete_ticket(request: Request, ticket_id: int):
     # Only the visitor at the counter can be completed
     number = finish_ticket(ticket_id, "completed", ("called",))
@@ -1470,7 +1551,7 @@ def complete_ticket(request: Request, ticket_id: int):
     return RedirectResponse(url="/queue_management", status_code=303)
 
 
-@app.post("/no-show/{ticket_id}", dependencies=[Depends(login_required)])
+@app.post("/no-show/{ticket_id}", dependencies=[Depends(require("queue"))])
 def no_show_ticket(request: Request, ticket_id: int):
     # The visitor at the counter, or one in the skipped list
     number = finish_ticket(ticket_id, "no_show", ("called", "skipped"))
@@ -1479,7 +1560,7 @@ def no_show_ticket(request: Request, ticket_id: int):
         notify_display_update()
     return RedirectResponse(url="/queue_management", status_code=303)
 
-@app.post("/queue/clear", dependencies=[Depends(login_required)])
+@app.post("/queue/clear", dependencies=[Depends(require("queue"))])
 def clear_queue(request: Request):
     """End-of-day cleanup: every unserved ticket becomes a no-show in attendance history.
 
@@ -1512,7 +1593,7 @@ def clear_queue(request: Request):
         notify_display_update()
     return RedirectResponse(url="/queue_management", status_code=303)
 
-@app.get("/attendance", dependencies=[Depends(login_required)])
+@app.get("/attendance", dependencies=[Depends(require("attendance"))])
 def show_attendance(
     request: Request,
     date_from: str = "",
@@ -1613,7 +1694,7 @@ def like_pattern(q: str) -> str:
     escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"%{escaped}%"
 
-@app.get("/attendance/print", dependencies=[Depends(login_required)])
+@app.get("/attendance/print", dependencies=[Depends(require("attendance"))])
 def attendance_print(request: Request, date_from: str = "", date_to: str = "", lane: str = "", service_id: str = "", q: str = ""):
     
     service_id_int = parse_optional_int(service_id)
@@ -1670,7 +1751,7 @@ def csv_safe(value) -> str:
     return "'" + s if s.startswith(_CSV_DANGEROUS) else s
 
 
-@app.get("/attendance/export", dependencies=[Depends(login_required)])
+@app.get("/attendance/export", dependencies=[Depends(require("attendance"))])
 def attendance_export(request: Request, date_from: str = "", date_to: str = "", lane: str = "", service_id: str = "", q: str = ""):
     """Download the attendance table (same filters as the page) as a CSV file."""
     service_id_int = parse_optional_int(service_id)
@@ -1737,7 +1818,7 @@ def template_name_of(db, template_id) -> str:
     row = db.get(DocumentTemplate, template_id) if template_id else None
     return row.name if row else "None"
 
-@app.get("/services", dependencies=[Depends(login_required)])
+@app.get("/services", dependencies=[Depends(require("services"))])
 def list_services(request: Request):
     message = request.session.pop("flash", None)
 
@@ -1757,7 +1838,7 @@ def list_services(request: Request):
 
         })
 
-@app.post("/services/add", dependencies=[Depends(login_required)])
+@app.post("/services/add", dependencies=[Depends(require("services"))])
 def add_services(request: Request, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status"),
                  document_template_id: str = Form("")):
     name = clean_text(service_name, 80)
@@ -1773,7 +1854,7 @@ def add_services(request: Request, service_name: str = Form(...), service_status
     log_action("Service", "Service Added", f"Added service: {name} ({service_status.value}){doc_note}", request)
     return RedirectResponse(url="/services", status_code=303)
 
-@app.post("/services/edit/{service_id}", dependencies=[Depends(login_required)])
+@app.post("/services/edit/{service_id}", dependencies=[Depends(require("services"))])
 def edit_service(request: Request, service_id: int, service_name: str = Form(...), service_status: StatusEnum = Form(alias="service_status"),
                  document_template_id: str = Form("")):
     changes = []
@@ -1803,7 +1884,7 @@ def edit_service(request: Request, service_id: int, service_name: str = Form(...
 
     return RedirectResponse(url="/services", status_code=303)
 
-@app.post("/services/delete/{service_id}", dependencies=[Depends(login_required)])
+@app.post("/services/delete/{service_id}", dependencies=[Depends(require("services"))])
 def delete_service(request: Request, service_id: int):
     db = SessionLocal()
     log_entry = None
@@ -1837,7 +1918,7 @@ def delete_service(request: Request, service_id: int):
     return RedirectResponse(url="/services", status_code=303)
 
 # AUDIT LOGS
-@app.get("/audit_logs", dependencies=[Depends(login_required)])
+@app.get("/audit_logs", dependencies=[Depends(require("audit"))])
 def show_audit_logs(
     request: Request,
     date_from: str = "",
@@ -1895,7 +1976,7 @@ def show_audit_logs(
 
 
 # MAINTENANCE (backup + purge)
-@app.get("/maintenance", dependencies=[Depends(login_required)])
+@app.get("/maintenance", dependencies=[Depends(require("maintenance"))])
 def show_maintenance(request: Request):
     message = request.session.pop("flash", None)
 
@@ -1923,7 +2004,7 @@ def show_maintenance(request: Request):
     })
 
 
-@app.post("/maintenance/backup", dependencies=[Depends(login_required)])
+@app.post("/maintenance/backup", dependencies=[Depends(require("maintenance"))])
 def run_backup(request: Request, folder: str = Form("")):
     """Copy the live database to a timestamped file using SQLite's own backup API.
 
@@ -1947,7 +2028,7 @@ def run_backup(request: Request, folder: str = Form("")):
         log_action("Database", "Backup", f"Database backup saved to {target}", request)
     return RedirectResponse(url="/maintenance", status_code=303)
 
-@app.post("/maintenance/printer/save", dependencies=[Depends(login_required)])
+@app.post("/maintenance/printer/save", dependencies=[Depends(require("maintenance"))])
 def save_printer(request: Request, printer_name: str = Form(""), paper_mm: str = Form("58")):
     name = clean_text(printer_name, 200)
     if paper_mm not in PAPER_COLUMNS:
@@ -1966,7 +2047,7 @@ def save_printer(request: Request, printer_name: str = Form(""), paper_mm: str =
     return RedirectResponse(url="/maintenance", status_code=303)
 
 
-@app.post("/maintenance/printer/test", dependencies=[Depends(login_required)])
+@app.post("/maintenance/printer/test", dependencies=[Depends(require("maintenance"))])
 def test_printer(request: Request):
     settings = load_printer_settings()
     try:
@@ -1980,7 +2061,7 @@ def test_printer(request: Request):
         log_action("Settings", "Test Print", "Printed a test slip", request)
     return RedirectResponse(url="/maintenance", status_code=303)
 
-@app.post("/maintenance/purge", dependencies=[Depends(login_required)])
+@app.post("/maintenance/purge", dependencies=[Depends(require("maintenance"))])
 def purge_old_records(request: Request, cutoff: str = Form(...)):
     """Delete attendance history (visits) from before the cutoff date.
 
@@ -2093,11 +2174,11 @@ def settings_saved(request: Request, section: str, changed: bool):
                                          "text": "Saved." if changed else "Nothing was changed."}
     return RedirectResponse(url=f"/settings#{section}", status_code=303)
 
-@app.get("/settings", dependencies=[Depends(admin_required)])
+@app.get("/settings", dependencies=[Depends(require("settings"))])
 def show_settings(request: Request):
     return settings_page(request)
 
-@app.post("/settings/profile", dependencies=[Depends(admin_required)])
+@app.post("/settings/profile", dependencies=[Depends(require("settings"))])
 def save_settings_profile(request: Request, barangay_name: str = Form(""), municipality: str = Form(""),
                           province: str = Form(""), header_line_1: str = Form(""), header_line_2: str = Form(""),
                           office_color: str = Form("")):
@@ -2107,7 +2188,7 @@ def save_settings_profile(request: Request, barangay_name: str = Form(""), munic
         return settings_page(request, form=new, errors={"profile": error}, status_code=400)
     return settings_saved(request, "profile", apply_settings(request, new, "Profile Updated"))
 
-@app.post("/settings/signatories", dependencies=[Depends(admin_required)])
+@app.post("/settings/signatories", dependencies=[Depends(require("settings"))])
 def save_settings_signatories(request: Request, signatory_captain_name: str = Form(""), signatory_captain_title: str = Form(""),
                               signatory_secretary_name: str = Form(""), signatory_secretary_title: str = Form("")):
     new = signatory_values(signatory_captain_name, signatory_captain_title,
@@ -2117,7 +2198,7 @@ def save_settings_signatories(request: Request, signatory_captain_name: str = Fo
         return settings_page(request, form=new, errors={"signatories": error}, status_code=400)
     return settings_saved(request, "signatories", apply_settings(request, new, "Signatories Updated"))
 
-@app.post("/settings/documents", dependencies=[Depends(admin_required)])
+@app.post("/settings/documents", dependencies=[Depends(require("settings"))])
 def save_settings_documents(request: Request, control_number_format: str = Form("")):
     new = {"control_number_format": control_number_format.strip()}
     error = branding.validate_documents(new)
@@ -2125,7 +2206,7 @@ def save_settings_documents(request: Request, control_number_format: str = Form(
         return settings_page(request, form=new, errors={"documents": error}, status_code=400)
     return settings_saved(request, "documents", apply_settings(request, new, "Document Defaults Updated"))
 
-@app.post("/settings/logos", dependencies=[Depends(admin_required)])
+@app.post("/settings/logos", dependencies=[Depends(require("settings"))])
 def save_settings_logos(request: Request,
                         logo_left: UploadFile | None = File(None), logo_right: UploadFile | None = File(None),
                         logo_third: UploadFile | None = File(None),
@@ -2329,7 +2410,7 @@ def template_views(db) -> list:
         "services": linked.get(r.id, []), "active": bool(r.is_active),
     } for r in db.query(DocumentTemplate).order_by(DocumentTemplate.id).all()]
 
-@app.get("/documents/templates", dependencies=[Depends(admin_required)])
+@app.get("/documents/templates", dependencies=[Depends(require("templates"))])
 def show_templates(request: Request):
     message = request.session.pop("flash", None)
     with SessionLocal() as db:
@@ -2441,7 +2522,7 @@ def read_template_form(db, template_id, name, body, code_prefix, default_fee, us
             "design": design, "font_half_pt": font, "line_spacing": spacing[0], "para_gap": spacing[1],
             "sign_space_mm": sign_space}, typed, None
 
-@app.get("/documents/templates/{template_id}/edit", dependencies=[Depends(admin_required)])
+@app.get("/documents/templates/{template_id}/edit", dependencies=[Depends(require("templates"))])
 def edit_template_page(request: Request, template_id: int):
     with SessionLocal() as db:
         row = db.get(DocumentTemplate, template_id)
@@ -2449,7 +2530,7 @@ def edit_template_page(request: Request, template_id: int):
             return RedirectResponse(url="/documents/templates", status_code=303)
         return render_template_editor(request, row)
 
-@app.post("/documents/templates/{template_id}/edit", dependencies=[Depends(admin_required)])
+@app.post("/documents/templates/{template_id}/edit", dependencies=[Depends(require("templates"))])
 def save_template(request: Request, template_id: int, name: str = Form(""), body: str = Form(""),
                   code_prefix: str = Form(""), default_fee: str = Form(""), use_validity: str = Form(""),
                   validity_months: str = Form(""), extras: list[str] = Form(default=[]), print_fee: str = Form(""),
@@ -2520,7 +2601,7 @@ def save_template(request: Request, template_id: int, name: str = Form(""), body
     flash(request, True, f'"{saved_name}" was saved.' if changes else "Nothing was changed.")
     return RedirectResponse(url="/documents/templates", status_code=303)
 
-@app.post("/documents/templates/preview", dependencies=[Depends(admin_required)])
+@app.post("/documents/templates/preview", dependencies=[Depends(require("templates"))])
 def preview_template(body: str = Form(""), default_fee: str = Form(""), use_validity: str = Form(""),
                      validity_months: str = Form(""), extras: list[str] = Form(default=[]),
                      code_prefix: str = Form(""), auto_bold: str = Form("")):
@@ -2550,7 +2631,7 @@ def preview_template(body: str = Form(""), default_fee: str = Form(""), use_vali
 
 # ---- loading a design: from a Word file, or from a picture of the whole blank page. The pictures are
 # stored at once (so the preview can show them); the template itself only changes on Save template.
-@app.post("/documents/designs/import", dependencies=[Depends(admin_required)])
+@app.post("/documents/designs/import", dependencies=[Depends(require("templates"))])
 def import_design(request: Request, design_file: UploadFile | None = File(None), kind: str = Form("")):
     if kind not in ("docx", "picture") or design_file is None or not design_file.filename:
         return JSONResponse({"error": "Please choose a file."}, status_code=400)
@@ -2565,7 +2646,7 @@ def import_design(request: Request, design_file: UploadFile | None = File(None),
     return JSONResponse({"design": design, "notes": notes})
 
 # ---- restore, duplicate, new, turn on / off, delete
-@app.post("/documents/templates/{template_id}/restore", dependencies=[Depends(admin_required)])
+@app.post("/documents/templates/{template_id}/restore", dependencies=[Depends(require("templates"))])
 def restore_template(request: Request, template_id: int):
     """Built-in documents only: go back to the wording in the code. Other settings are untouched."""
     with SessionLocal() as db:
@@ -2581,7 +2662,7 @@ def restore_template(request: Request, template_id: int):
     flash(request, True, "The original wording was restored." if changed else "The wording was already the original.")
     return RedirectResponse(url=f"/documents/templates/{template_id}/edit", status_code=303)
 
-@app.post("/documents/templates/{template_id}/duplicate", dependencies=[Depends(admin_required)])
+@app.post("/documents/templates/{template_id}/duplicate", dependencies=[Depends(require("templates"))])
 def duplicate_template(request: Request, template_id: int):
     with SessionLocal() as db:
         row = db.get(DocumentTemplate, template_id)
@@ -2601,7 +2682,7 @@ def duplicate_template(request: Request, template_id: int):
     flash(request, True, f'Copied as "{copy_name}". Change its name and wording below.')
     return RedirectResponse(url=f"/documents/templates/{copy_id}/edit", status_code=303)
 
-@app.post("/documents/templates/new", dependencies=[Depends(admin_required)])
+@app.post("/documents/templates/new", dependencies=[Depends(require("templates"))])
 def new_template(request: Request):
     """A new template starts from the Blank document's wording."""
     blank = doc_templates.BUILTINS["blank_en"]
@@ -2619,7 +2700,7 @@ def new_template(request: Request):
     flash(request, True, "New template created. Give it a name and write its wording below.")
     return RedirectResponse(url=f"/documents/templates/{created_id}/edit", status_code=303)
 
-@app.post("/documents/templates/{template_id}/deactivate", dependencies=[Depends(admin_required)])
+@app.post("/documents/templates/{template_id}/deactivate", dependencies=[Depends(require("templates"))])
 def deactivate_template(request: Request, template_id: int):
     with SessionLocal() as db:
         row = db.get(DocumentTemplate, template_id)
@@ -2633,7 +2714,7 @@ def deactivate_template(request: Request, template_id: int):
     log_action("Documents", "Template Turned Off", f'Turned off "{name}"{note}', request)
     return RedirectResponse(url="/documents/templates", status_code=303)
 
-@app.post("/documents/templates/{template_id}/activate", dependencies=[Depends(admin_required)])
+@app.post("/documents/templates/{template_id}/activate", dependencies=[Depends(require("templates"))])
 def activate_template(request: Request, template_id: int):
     with SessionLocal() as db:
         row = db.get(DocumentTemplate, template_id)
@@ -2645,7 +2726,7 @@ def activate_template(request: Request, template_id: int):
     log_action("Documents", "Template Turned On", f'Turned on "{name}"', request)
     return RedirectResponse(url="/documents/templates", status_code=303)
 
-@app.post("/documents/templates/{template_id}/delete", dependencies=[Depends(admin_required)])
+@app.post("/documents/templates/{template_id}/delete", dependencies=[Depends(require("templates"))])
 def delete_template(request: Request, template_id: int):
     """Custom templates only. One that already has issued documents is turned off instead, like services."""
     entry = None
@@ -2707,7 +2788,7 @@ def safe_back(back: str) -> str:
     return back if back.startswith("/documents/history") else "/documents/history"
 
 # ---- the picker (the "Issue a document" tab)
-@app.get("/documents", dependencies=[Depends(login_required)])
+@app.get("/documents", dependencies=[Depends(require("issue"))])
 def documents_picker(request: Request, client_name: str = "", address: str = "",
                      ticket_number: str = "", ticket_date: str = ""):
     carry = carry_params(client_name, address, ticket_number, ticket_date)
@@ -2750,7 +2831,7 @@ def voided_original(db, copy_of: str, template_id: int):
         return original
     return None
 
-@app.get("/documents/issue/{template_id}", dependencies=[Depends(login_required)])
+@app.get("/documents/issue/{template_id}", dependencies=[Depends(require("issue"))])
 def issue_form(request: Request, template_id: int, client_name: str = "", address: str = "", ticket: str = "",
                ticket_number: str = "", ticket_date: str = "", copy_of: str = ""):
     with SessionLocal() as db:
@@ -2795,7 +2876,7 @@ def issue_form(request: Request, template_id: int, client_name: str = "", addres
         return render_issue_form(request, row, form, carry.get("ticket_number", ""), carry.get("ticket_date", ""),
                                  str(original.id) if original else "")
 
-@app.post("/documents/issue/{template_id}/preview", dependencies=[Depends(login_required)])
+@app.post("/documents/issue/{template_id}/preview", dependencies=[Depends(require("issue"))])
 def preview_issue(template_id: int, client_name: str = Form(""), address: str = Form(""), purpose: str = Form(""),
                   issue_date: str = Form(""), age: str = Form(""), civil_status: str = Form(""),
                   nationality: str = Form(""), years: str = Form(""), fee: str = Form(""), or_choice: str = Form(""),
@@ -2832,7 +2913,7 @@ def preview_issue(template_id: int, client_name: str = Form(""), address: str = 
     return JSONResponse({"paragraphs": paragraphs,
                          "fee_line": documents.fee_line(fee_centavos, "provided" if number else "not_available", number, print_fee)})
 
-@app.post("/documents/issue/{template_id}", dependencies=[Depends(login_required)])
+@app.post("/documents/issue/{template_id}", dependencies=[Depends(require("issue"))])
 def issue_document(request: Request, template_id: int, issue_token: str = Form(""),
                    client_name: str = Form(""), address: str = Form(""), purpose: str = Form(""),
                    issue_date: str = Form(""), age: str = Form(""), civil_status: str = Form(""),
@@ -2915,7 +2996,7 @@ def issue_document(request: Request, template_id: int, issue_token: str = Form("
     return RedirectResponse(url=f"/documents/issued/{record_id}/print?first=1", status_code=303)
 
 # ---- the print page (first print, and reprints)
-@app.get("/documents/issued/{doc_id}/print", dependencies=[Depends(login_required)])
+@app.get("/documents/issued/{doc_id}/print", dependencies=[Depends(require("issue", "view_issued"))])
 def print_document(request: Request, doc_id: int, first: str = ""):
     b = branding.get_branding()
     with SessionLocal() as db:
@@ -2972,7 +3053,7 @@ def history_filters(date_from, date_to, template_id, status, receipt):
     return (d_from, d_to, parse_optional_int(template_id), status if status in ("issued", "voided") else "",
             "no_or" if receipt == "no_or" else "")
 
-@app.get("/documents/history", dependencies=[Depends(login_required)])
+@app.get("/documents/history", dependencies=[Depends(require("view_issued"))])
 def documents_history(request: Request, date_from: str = "", date_to: str = "", template_id: str = "",
                       status: str = "", receipt: str = "", q: str = "", page: str = "1"):
     d_from, d_to, tid, status, receipt = history_filters(date_from, date_to, template_id, status, receipt)
@@ -3025,7 +3106,7 @@ def documents_history(request: Request, date_from: str = "", date_to: str = "", 
         "back": str(request.url.path) + (("?" + request.url.query) if request.url.query else ""),
     })
 
-@app.get("/documents/history/export", dependencies=[Depends(login_required)])
+@app.get("/documents/history/export", dependencies=[Depends(require("view_issued"))])
 def documents_export(request: Request, date_from: str = "", date_to: str = "", template_id: str = "",
                      status: str = "", receipt: str = "", q: str = ""):
     """The list as a CSV file: same filters as the page, with the fee, OR number and OR status."""
@@ -3050,7 +3131,7 @@ def documents_export(request: Request, date_from: str = "", date_to: str = "", t
         headers={"Content-Disposition": f'attachment; filename="issued_documents_{d_from}_to_{d_to}.csv"'})
     
 # ---- void, and adding a missing OR number
-@app.post("/documents/issued/{doc_id}/void", dependencies=[Depends(login_required)])
+@app.post("/documents/issued/{doc_id}/void", dependencies=[Depends(require("void"))])
 def void_document(request: Request, doc_id: int, reason: str = Form(""), back: str = Form("")):
     reason = clean_text(reason, 200)
     if not reason:
@@ -3069,7 +3150,7 @@ def void_document(request: Request, doc_id: int, reason: str = Form(""), back: s
         flash(request, False, "That document could not be voided. It may already be voided.")
     return RedirectResponse(url=safe_back(back), status_code=303)
 
-@app.post("/documents/issued/{doc_id}/or", dependencies=[Depends(login_required)])
+@app.post("/documents/issued/{doc_id}/or", dependencies=[Depends(require("add_or"))])
 def add_or_number(request: Request, doc_id: int, or_number: str = Form(""), back: str = Form("")):
     """A receipt number that was missing at issue time. The certificate text is not touched."""
     number_typed = clean_text(or_number, 40)
@@ -3211,15 +3292,24 @@ def display_data():
 
 open_display_window = None
 
+def signed_in_home(request: Request) -> str:
+    """The start page of whoever is signed in, for routes that have no guard of their own."""
+    try:
+        check_signed_in(request)
+    except NotAuthenticated:
+        return "/login"
+    return home_url(request)
+
+
 @app.post("/display/open")
 def open_display(request: Request):
     if open_display_window is None:
         flash(request, True, f"Open {request.base_url}display in another browser window.")
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url=signed_in_home(request), status_code=303)
     try:
         open_display_window()
     except Exception:
         log.exception("Could not open the display window")
         flash(request, False, "The display screen could not be opened. See app.log.")
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url=signed_in_home(request), status_code=303)
     return Response(status_code=204)

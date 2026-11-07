@@ -14,6 +14,9 @@ installer_output/
 *.db-*
 *.bak
 backups/
+static/audio
+static/app-icon.png
+app_icon.ico
 
 # Secrets and logs
 *.key
