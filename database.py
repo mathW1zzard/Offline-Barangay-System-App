@@ -119,6 +119,8 @@ class AdminLog(Base):
     created_at = Column(DateTime, default=datetime.now, index=True)
     # A copy of the name, not a foreign key, so the entry stays readable if the account changes
     admin_username = Column(String)
+    # The person's full name at that moment (v9). Empty on older entries and on "system" entries.
+    admin_full_name = Column(String)
     category = Column(String, index=True)   # Queue / Service / Settings / Security / Database
     action = Column(String)                 # short label, e.g. "Ticket Skipped"
     description = Column(String)            # the readable sentence
@@ -523,8 +525,14 @@ def _v8_staff_roles(con):
     con.execute("UPDATE admins SET full_name = username WHERE full_name IS NULL OR trim(full_name) = ''")
 
 
+def _v9_audit_full_name(con):
+    """Step 9c: the audit log keeps the person's full name next to the username. Older entries are
+    left as they are (only the username), so no past entry is rewritten."""
+    _add_column(con, "admin_logs", "admin_full_name", "VARCHAR")
+
+
 MIGRATIONS = [_v1_counters_and_indexes, _v2_documents_settings_address, _v3_legacy_logo_flag, _v4_wording_options,
-              _v5_pictures_and_design, _v6_spacing, _v7_sign_space, _v8_staff_roles]
+              _v5_pictures_and_design, _v6_spacing, _v7_sign_space, _v8_staff_roles, _v9_audit_full_name]
 LATEST = len(MIGRATIONS)
 
 def _has_table(db_file, name):

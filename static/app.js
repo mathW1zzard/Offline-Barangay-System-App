@@ -487,5 +487,60 @@
         showTotal();
         
     }
+
+    // ---------- Idle logout (step 9c) ----------
+    // Shared front-desk PC: after 9 minutes with no clicking or typing a pop-up counts down from 60,
+    // then the page logs out by itself. While someone is active, the server is told about once every
+    // 30 seconds, so a long form typed without opening another page never counts as "idle" there.
+    const idleMinutes = parseFloat(document.body.dataset.idleMinutes || '0');
+    const idleDialog = $('#idle-dialog');
+    if (idleMinutes > 0 && idleDialog) {
+        const LIMIT_MS = idleMinutes * 60 * 1000;
+        const WARN_MS = parseFloat(document.body.dataset.idleWarning || '60') * 1000;
+        const PING_EVERY_MS = Math.min(30 * 1000, LIMIT_MS / 4);
+        const countEl = $('#idle-count');
+        let lastActive = Date.now();
+        let lastPing = Date.now();          // opening this page already counted as activity
+        let leaving = false;
+
+        const tellServer = () => {
+            lastPing = Date.now();
+            fetch('/still-here', { method: 'POST' })
+                .then((res) => { if (res.status === 401) { leaving = true; location.href = '/login'; } })
+                .catch(() => {});           // the app is closing or restarting: nothing to do
+        };
+
+        // While the pop-up is open, only "I'm still here" (or Esc) answers it. Otherwise moving the
+        // mouse toward a button would close the pop-up before the person could click it.
+        const stillHere = (e) => {
+            if (leaving) return;
+            if (idleDialog.open && e && e.currentTarget === document) return;
+            lastActive = Date.now();
+            if (idleDialog.open) idleDialog.close();
+            if (Date.now() - lastPing >= PING_EVERY_MS) tellServer();
+        };
+
+        ['pointerdown', 'pointermove', 'keydown', 'wheel', 'scroll', 'touchstart', 'input'].forEach((name) =>
+            document.addEventListener(name, stillHere, { capture: true, passive: true }));
+        $('#idle-stay').addEventListener('click', stillHere);
+        idleDialog.addEventListener('cancel', (e) => { e.preventDefault(); stillHere(); });   // Esc = still here
+
+        setInterval(() => {
+            if (leaving) return;
+            const idle = Date.now() - lastActive;
+            if (idle >= LIMIT_MS) {          // also true right after the PC wakes from sleep
+                leaving = true;
+                $('#idle-logout-form').submit();
+                return;
+            }
+            if (idle >= LIMIT_MS - WARN_MS) {
+                countEl.textContent = Math.max(1, Math.ceil((LIMIT_MS - idle) / 1000));
+                if (!idleDialog.open) {
+                    idleDialog.showModal();
+                    $('#idle-stay').focus();
+                }
+            }
+        }, 1000);
+    }
 })();
 

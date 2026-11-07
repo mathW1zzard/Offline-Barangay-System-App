@@ -173,10 +173,21 @@ THROTTLE_MAX_FAILURES, THROTTLE_WINDOW_SECONDS = 5, 60
 # ADMIN LOGS
 LOG_CATEGORIES = ["Queue", "Service", "Settings", "Security", "Database", "Documents", "Staff"]
 NOT_SIGNED_IN = "(not signed in)" # who gets blamed for failed logins
+# Names the audit log uses for things nobody signed in did. No account may have them, or a person's
+# actions would look like the app's own (checked ignoring capital letters).
+RESERVED_USERNAMES = {"system", NOT_SIGNED_IN}
 
 # SESSION TRACKING (so the audit log can record a session that ended by closing the app)
 active_admin_id = None
-SESSION_EVENTS = ("Login", "Logout", "Session Closed", "Session Interrupted")
+SESSION_EVENTS = ("Login", "Logout", "Idle Logout", "Session Closed", "Session Interrupted")
+
+# IDLE LOGOUT (step 9c): on a shared front-desk PC, nobody stays signed in on an empty desk
+IDLE_LOGOUT_MINUTES = 10     # signed out after this long with no clicking or typing
+IDLE_WARNING_SECONDS = 60    # the "Are you still there?" pop-up appears this long before that
+IDLE_GRACE_SECONDS = 60      # the server's own check waits this much longer than the page's timer,
+                             # so the two never race; it only matters if the page's timer could not run
+IDLE_NOTICE = (f"You were logged out because nothing was clicked or typed for {IDLE_LOGOUT_MINUTES} minutes. "
+               "Sign in again to continue.")
 SESSION_SECRET = load_secret_key() 
 
 # DAILY ROLLOVER (tickets left over from a previous day)
@@ -203,19 +214,26 @@ def flash(request: Request, ok: bool, text_: str):
 def log_action(category: str, action: str, description: str = "", request: Request = None, username: str = None):
     """Write one row to the admin audit log. Call it AFTER the action succeeded.
 
-    Who did it: pass `request` (the signed-in admin is looked up from the session) or pass
+    Who did it: pass `request` (the signed-in person is looked up from the session) or pass
     `username` directly (login, recovery, background events). With neither, it is logged as "system".
+    Both the username and the person's full name AT THAT MOMENT are saved, so a later name change
+    (e.g. a married surname) never rewrites an old entry.
     It never raises: a logging problem must not stop the real action (like calling a ticket).
     """
     try:
         db = SessionLocal()
         try:
+            admin = None
             if username is None and request is not None:
                 admin_id = request.session.get("admin_id")
-                admin = db.query(Admin).filter(Admin.id == admin_id).first() if admin_id else None
+                admin = db.get(Admin, admin_id) if admin_id else None
                 username = admin.username if admin else None
+            elif username and username.lower() not in RESERVED_USERNAMES:
+                admin = find_account(db, username)
+            full_name = (admin.full_name or "").strip() if admin else ""
             db.add(AdminLog(
                 admin_username=username or "system",
+                admin_full_name=full_name or None,
                 category=category,
                 action=action,
                 description=description,
@@ -796,6 +814,9 @@ def process_setup(request: Request, username: str = Form(...), password: str = F
     
     if not username: 
         return templates.TemplateResponse(request, "setup1.html",{"error": "Username is required."}, status_code=400)
+    if username.lower() in RESERVED_USERNAMES:
+        return templates.TemplateResponse(request, "setup1.html",
+            {"error": "That username is reserved. Choose another one."}, status_code=400)
 
     error = validate_new_password(password, confirm_password)
 
@@ -836,7 +857,9 @@ def process_setup(request: Request, username: str = Form(...), password: str = F
 
 @app.get("/login")
 def show_login(request: Request):
-    return templates.TemplateResponse(request, "login.html", {})
+    # A one-time note left by sign_out(), e.g. "You were logged out because nothing was clicked..."
+    notice = request.session.pop("login_notice", None)
+    return templates.TemplateResponse(request, "login.html", {"notice": notice})
 
 
 @app.post("/login")
@@ -926,13 +949,39 @@ def process_forgot_password(
                "Password reset using the recovery key; a new recovery key was issued", username=username)
     return templates.TemplateResponse(request, "recovery_key_display.html", {"recovery_key": new_recovery_key})
 
-@app.post("/logout")
-def logout(request: Request):
+def sign_out(request: Request, action: str, description: str, notice: str = "", notice_kind: str = "warn"):
+    """End the session. The audit entry is written first, while the session still says who it was.
+    `notice` is shown once on the login screen that comes next ("warn" = amber, "success" = green)."""
     global active_admin_id
     if request.session.get("admin_id"):
-        log_action("Security", "Logout", "Signed out", request)   # before the session is cleared
+        log_action("Security", action, description, request)
     active_admin_id = None
     request.session.clear()
+    if notice:
+        request.session["login_notice"] = {"text": notice, "kind": notice_kind}
+
+
+@app.post("/still-here")
+def still_here(request: Request):
+    """The page's quiet "still active" signal (static/app.js), sent at most every 30 seconds while
+    someone clicks or types. Typing one long form without opening another page still counts."""
+    try:
+        check_signed_in(request)              # saves the time as activity, or signs out if it is too late
+    except NotAuthenticated:
+        return JSONResponse({"signed_in": False}, status_code=401)
+    return JSONResponse({"signed_in": True})
+
+
+@app.post("/logout")
+def logout(request: Request, reason: str = Form("")):
+    if reason == "idle":            # sent by the page itself when the idle countdown runs out
+        sign_out(request, "Idle Logout",
+                 f"Signed out automatically after {IDLE_LOGOUT_MINUTES} minutes with no activity", IDLE_NOTICE)
+    elif reason == "switch":        # account menu > Switch user: the next person signs in on this PC
+        sign_out(request, "Logout", "Signed out to switch user",
+                 "Signed out. The next person can now sign in with their own account.", "success")
+    else:
+        sign_out(request, "Logout", "Signed out")
     return RedirectResponse(url="/login", status_code=303)
 
 class NotAuthenticated(Exception):
@@ -979,6 +1028,19 @@ def check_signed_in(request: Request):
     if not valid:                         # account deleted or turned off, or password changed/reset elsewhere
         request.session.clear()
         raise NotAuthenticated()
+
+    # Idle logout, the server's half. The page normally logs out by itself (static/app.js); this
+    # catches the rest, e.g. the PC slept with a page open and someone clicks after waking it.
+    now = datetime.now().timestamp()
+    seen = request.session.get("seen")
+    if seen and now - seen > IDLE_LOGOUT_MINUTES * 60 + IDLE_GRACE_SECONDS:
+        last = datetime.fromtimestamp(seen).strftime("%I:%M %p").lstrip("0")
+        sign_out(request, "Idle Logout",
+                 f"Signed out automatically: no activity for more than {IDLE_LOGOUT_MINUTES} minutes "
+                 f"(last activity at {last})", IDLE_NOTICE)
+        raise NotAuthenticated()
+    request.session["seen"] = now         # every page opened or button pressed counts as activity
+
     global active_admin_id
     active_admin_id = admin_id
     ensure_daily_rollover()
@@ -1034,7 +1096,8 @@ def can_any(request: Request, keys) -> bool:
     return not keys or any(can(request, k) for k in keys)
 
 
-templates.env.globals.update(can=can, can_any=can_any, home_url=home_url)
+templates.env.globals.update(can=can, can_any=can_any, home_url=home_url,
+                             idle_minutes=IDLE_LOGOUT_MINUTES, idle_warning_seconds=IDLE_WARNING_SECONDS)
 
 
 def require(*keys: str):
@@ -2010,6 +2073,8 @@ def add_staff(request: Request, full_name: str = Form(""), username: str = Form(
         if not USERNAME_RULE.fullmatch(user):
             return staff_back(request, False, "The username needs 3 to 30 small letters or numbers, "
                                               "and may use a dot, dash or underscore (for example ana.cruz).")
+        if user in RESERVED_USERNAMES:
+            return staff_back(request, False, "That username is reserved. Choose another one.")
         if find_account(db, user):
             return staff_back(request, False, f'The username "{user}" is already taken. Choose another one.')
         if role is None:
@@ -2309,6 +2374,7 @@ def show_audit_logs(
         if q:
             like = like_pattern(q)
             query = query.filter(AdminLog.admin_username.ilike(like, escape="\\")
+                                 | AdminLog.admin_full_name.ilike(like, escape="\\")
                                  | AdminLog.action.ilike(like, escape="\\")
                                  | AdminLog.description.ilike(like, escape="\\"))
 

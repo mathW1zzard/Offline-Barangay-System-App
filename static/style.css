@@ -472,8 +472,8 @@ select {
     height: 12px;
 }
 
-.user-menu:hover .menu,
-.user-menu:focus-within .menu {
+/* Opened and closed by clicking the round button (app.js), like the light/dark menu */
+.menu:not([hidden]) {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
@@ -1919,6 +1919,26 @@ tbody tr.is-current:hover td {
     gap: 12px;
     flex-wrap: wrap;
     margin-top: 4px;
+}
+
+/* Audit log "Done by": room for a full name on one line */
+.audit-who {
+    min-width: 170px;
+}
+
+/* Idle logout warning (step 9c): the countdown number is big enough to see from the counter */
+.idle-count {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--amber-ink);
+    margin-top: -10px;
+}
+
+.idle-count span {
+    font-size: 44px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    margin-right: 6px;
 }
 
 /* ---------------------------------------------------------------- light / dark menu (top bar) */

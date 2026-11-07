@@ -2,7 +2,7 @@
 {% from "_macros.html" import icon %}
 {% block title %}Audit Logs{% endblock %}
 {% block page_title %}Audit Logs{% endblock %}
-{% block page_subtitle %}Record of admin actions{% endblock %}
+{% block page_subtitle %}Record of staff actions{% endblock %}
 {% block description %}Who did what in the system, and when{% endblock %}
 {% block content %}
 {# One encoded query string, shared by every pagination link #}
@@ -10,7 +10,7 @@
 
 <section class="card">
     <div class="section-head">
-        <h2>Admin Activity</h2>
+        <h2>Staff Activity</h2>
     </div>
 
     <!--FILTERS-->
@@ -34,7 +34,7 @@
         </div>
         <div class="field field-grow">
             <label for="search-client">Search</label>
-            <input type="search" name="q" id="search-client" placeholder="Admin, action or description" value="{{ search }}" autocomplete="off">
+            <input type="search" name="q" id="search-client" placeholder="Name, action or description" value="{{ search }}" autocomplete="off">
         </div>
     </form>
 
@@ -43,7 +43,7 @@
             <thead>
                 <tr>
                     <th>Timestamp</th>
-                    <th>Admin user</th>
+                    <th>Done by</th>
                     <th>Category</th>
                     <th>Action</th>
                     <th>Description</th>
@@ -53,7 +53,13 @@
                 {% for log in logs %}
                 <tr>
                     <td><strong>{{ log.created_at.strftime('%m/%d/%Y %I:%M:%S %p') if log.created_at else '--' }}</strong></td>
-                    <td class="cell-primary">{{ log.admin_username }}</td>
+                    {# Full name as it was that day, username under it. Older entries only have the username. #}
+                    <td class="audit-who">{% if log.admin_full_name and log.admin_full_name != log.admin_username -%}
+                        <span class="cell-primary">{{ log.admin_full_name }}</span>
+                        <span class="cell-sub">{{ log.admin_username }}</span>
+                        {%- else -%}
+                        <span class="cell-primary">{{ log.admin_username }}</span>
+                        {%- endif %}</td>
                     <td><span class="tag tag-regular">{{ log.category }}</span></td>
                     <td class="cell-primary">{{ log.action }}</td>
                     <td>{{ log.description }}</td>

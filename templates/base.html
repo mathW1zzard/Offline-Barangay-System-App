@@ -12,7 +12,8 @@
     {% block head %}{% endblock %}
 </head>
 
-<body>
+{# The idle timer in app.js runs only when someone is signed in (these attributes switch it on) #}
+<body{% if request.state.user %} data-idle-minutes="{{ idle_minutes }}" data-idle-warning="{{ idle_warning_seconds }}"{% endif %}>
     <div class="shell">
         <!--SIDEBAR-->
         <aside class="sidebar">
@@ -128,10 +129,10 @@
                     <div class="user-menu">
 
                         <button type="button" class="avatar" id="user-menu-btn" aria-haspopup="menu"
-                            aria-label="Account menu">{{
+                            aria-expanded="false" aria-controls="user-menu" aria-label="Account menu">{{
                             admin_initials(request) }}</button>
 
-                        <div class="menu" id="user-menu" role="menu">
+                        <div class="menu" id="user-menu" role="menu" hidden>
                             {% set signed_in = request.state.user %}
                             {% if signed_in %}
                             <div class="menu-who">
@@ -140,6 +141,11 @@
                             </div>
                             {% endif %}
                             <a href="/change-password" role="menuitem">{{ icon('key', 18) }} Change password</a>
+                            {# Shared PC: no "are you sure?" step, so handing over the desk is quick #}
+                            <form method="post" action="/logout">
+                                <input type="hidden" name="reason" value="switch">
+                                <button type="submit" role="menuitem">{{ icon('users', 18) }} Switch user</button>
+                            </form>
                             <button type="button" role="menuitem" data-confirm data-action="/logout"
                                 data-title="Log out of your account?"
                                 data-message="You will be signed out and will need to enter your username and password again to use the system."
@@ -172,6 +178,25 @@
             </div>
         </form>
     </dialog>
+
+    <!-- Idle logout warning (step 9c). app.js opens it 60 seconds before the automatic logout. -->
+    {% if request.state.user %}
+    <dialog id="idle-dialog" class="modal" role="alertdialog" data-keep-open
+        aria-labelledby="idle-title" aria-describedby="idle-text">
+        <form method="post" action="/logout" class="modal-body">
+            <h2 id="idle-title">Are you still there?</h2>
+            <p id="idle-text" class="modal-text">To protect visitors' details, you will be logged out in</p>
+            <p class="idle-count"><span id="idle-count">{{ idle_warning_seconds }}</span> seconds</p>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-outline">Log out now</button>
+                <button type="button" class="btn btn-primary" id="idle-stay">I'm still here</button>
+            </div>
+        </form>
+    </dialog>
+    <form method="post" action="/logout" id="idle-logout-form" hidden>
+        <input type="hidden" name="reason" value="idle">
+    </form>
+    {% endif %}
 
     {% block dialogs %}{% endblock %}
 
