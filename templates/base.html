@@ -28,34 +28,45 @@
                 setup rarely. A group heading is real information here, not decoration. -#}
             <nav class="nav" aria-label="Main">
                 {% set path = request.url.path %}
+                {#- Documents opens on the first of its tabs this person may use. -#}
+                {% if can(request, 'issue') %}{% set docs_href = '/documents' %}
+                {% elif can(request, 'view_issued') %}{% set docs_href = '/documents/history' %}
+                {% else %}{% set docs_href = '/documents/templates' %}{% endif %}
+                {#- Each page lists the permissions that show it (any one is enough; none = everyone). -#}
                 {% set nav_groups = [
                 ('Front desk', [
-                ('/client_registration', 'Client Registration', 'user-plus'),
-                ('/queue_management', 'Queue Management', 'list'),
-                ('/documents', 'Documents', 'file-text'),
-                ('/dashboard', 'Dashboard', 'dashboard'),
+                ('/client_registration', 'Client Registration', 'user-plus', ['register']),
+                ('/queue_management', 'Queue Management', 'list', ['queue']),
+                (docs_href, 'Documents', 'file-text', ['issue', 'view_issued', 'templates']),
+                ('/dashboard', 'Dashboard', 'dashboard', ['dashboard']),
                 ]),
                 ('Records', [
-                ('/attendance', 'Attendance', 'calendar'),
-                ('/audit_logs', 'Audit Logs', 'clipboard'),
+                ('/attendance', 'Attendance', 'calendar', ['attendance']),
+                ('/audit_logs', 'Audit Logs', 'clipboard', ['audit']),
                 ]),
                 ('Setup', [
-                ('/services', 'Services', 'landmark'),
-                ('/settings', 'Settings', 'sliders'),
-                ('/maintenance', 'Maintenance', 'database'),
-                ('/about', 'About', 'info'),
+                ('/services', 'Services', 'landmark', ['services']),
+                ('/settings', 'Settings', 'sliders', ['settings']),
+                ('/maintenance', 'Maintenance', 'database', ['maintenance']),
+                ('/about', 'About', 'info', []),
                 ]),
                 ] %}
                 {% for group, items in nav_groups %}
+                {% set shown = [] %}
+                {% for href, label, ico, needs in items if can_any(request, needs) %}
+                {% set _ = shown.append((href, label, ico)) %}
+                {% endfor %}
+                {% if shown %}
                 <div class="nav-group">
                     <p class="nav-heading">{{ group }}</p>
-                    {% for href, label, ico in items %}
-                    <a href="{{ href }}" class="nav-link{{ ' active' if path.startswith(href) }}" {% if
-                        path.startswith(href) %} aria-current="page" {% endif %}>
+                    {% for href, label, ico in shown %}
+                    {% set here = path.startswith('/documents') if label == 'Documents' else path.startswith(href) %}
+                    <a href="{{ href }}" class="nav-link{{ ' active' if here }}" {% if here %}aria-current="page"{% endif %}>
                         {{ icon(ico, 20) }}<span>{{ label }}</span>
                     </a>
                     {% endfor %}
                 </div>
+                {% endif %}
                 {% endfor %}
             </nav>
 
@@ -77,11 +88,18 @@
                 </div>
                 <div class="topbar-right">
                     {% set in_queue = active_queue_today() %}
+                    {% if can(request, 'queue') %}
                     <a class="queue-pill{{ ' is-empty' if not in_queue }}" href="/queue_management"
                         title="Waiting, called and skipped tickets today. Opens Queue Management.">
                         <span class="dot{{ ' dot-pulse' if in_queue }}"></span>
                         <strong>{{ in_queue }}</strong> in queue
                     </a>
+                    {% else %}
+                    <span class="queue-pill{{ ' is-empty' if not in_queue }}" title="Waiting, called and skipped tickets today.">
+                        <span class="dot{{ ' dot-pulse' if in_queue }}"></span>
+                        <strong>{{ in_queue }}</strong> in queue
+                    </span>
+                    {% endif %}
 
                     {#- Light / dark: applied at once, saved by the app (see /preferences/theme). -#}
                     {% set theme = ui_theme() %}
@@ -113,6 +131,13 @@
                             admin_initials(request) }}</button>
 
                         <div class="menu" id="user-menu" role="menu">
+                            {% set me = request.state.user %}
+                            {% if me %}
+                            <div class="menu-who">
+                                <strong>{{ me.full_name }}</strong>
+                                <span>{{ me.role_name }}</span>
+                            </div>
+                            {% endif %}
                             <a href="/change-password" role="menuitem">{{ icon('key', 18) }} Change password</a>
                             <button type="button" role="menuitem" data-confirm data-action="/logout"
                                 data-title="Log out of your account?"

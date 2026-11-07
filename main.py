@@ -939,6 +939,7 @@ class SetupRequired(Exception):
 async def setup_required_handler(request: Request, exc: SetupRequired):
     return RedirectResponse(url="/wizard", status_code=303)
 
+
 class StaffUser:
     """The person signed in for this request, with their role (read fresh on every request, so a
     change the administrator makes applies on that person's next click)."""
@@ -949,7 +950,8 @@ class StaffUser:
         self.full_name = (admin.full_name or admin.username or "").strip()
         self.role_name, self.is_admin = role.name, bool(role.is_admin)
         self.perms = frozenset(perms.KEYS) if self.is_admin else perms.parse(role.permissions)
-        
+
+
 def check_signed_in(request: Request):
     admin_id = request.session.get("admin_id")
     if not admin_id:
@@ -1389,7 +1391,7 @@ def show_queue(request: Request):
         prepare = None
         linked_id = current_ticket.service.document_template_id if current_ticket and current_ticket.service else None
         linked = db.get(DocumentTemplate, linked_id) if linked_id else None
-        if linked and linked.is_active and can(request, "issue"):
+        if linked and linked.is_active and can(request, "issue"):    # only for people who may issue
             prepare = {"url": f"/documents/issue/{linked.id}?ticket={current_ticket.id}", "name": linked.name}
             
         announce = request.session.pop("announce", None)        # one-shot: gone after this page load

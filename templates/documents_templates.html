@@ -7,7 +7,7 @@
 {% block toasts %}{{ toast(message) }}{% endblock %}
 {% block content %}
 
-{{ documents_tabs('templates') }}
+{{ documents_tabs('templates', request) }}
 
 <section class="card">
     <div class="section-head">

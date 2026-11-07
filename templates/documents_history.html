@@ -9,7 +9,7 @@
 {# One encoded query string, shared by the export link and the pagination links #}
 {% set qs = {'date_from': date_from, 'date_to': date_to, 'template_id': template_id or '', 'status': status, 'receipt': receipt, 'q': search}|urlencode %}
 
-{{ documents_tabs('history') }}
+{{ documents_tabs('history', request) }}
 
 <section>
     <div class="stat-grid">
@@ -107,12 +107,16 @@
                         <div class="row-actions">
                             <a class="btn btn-sm btn-outline" href="/documents/issued/{{ d.id }}/print">{{ icon('printer', 16) }} {{ 'View' if d.voided else 'Reprint' }}</a>
                             {% if d.voided %}
+                            {% if can(request, 'issue') %}
                             <a class="btn btn-sm btn-outline" href="/documents/issue/{{ d.template_id }}?copy_of={{ d.id }}">Issue a corrected copy</a>
+                            {% endif %}
                             {% else %}
-                            {% if d.or_status == 'not_available' %}
+                            {% if d.or_status == 'not_available' and can(request, 'add_or') %}
                             <button type="button" class="btn btn-sm btn-outline" data-add-or="{{ d.id }}" data-control="{{ d.control_number }}">Add OR number</button>
                             {% endif %}
+                            {% if can(request, 'void') %}
                             <button type="button" class="btn btn-sm btn-danger-outline" data-void="{{ d.id }}" data-control="{{ d.control_number }}">{{ icon('user-x', 16) }} Void</button>
+                            {% endif %}
                             {% endif %}
                         </div>
                     </td>

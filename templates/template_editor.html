@@ -13,7 +13,7 @@
 <div class="alert {{ 'alert-success' if message.ok else 'alert-error' }}" role="{{ 'status' if message.ok else 'alert' }}">{{ message.text }}</div>
 {% endif %}
 
-{{ documents_tabs('templates') }}
+{{ documents_tabs('templates', request) }}
 
 <div class="editor-layout">
     <section class="card">

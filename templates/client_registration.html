@@ -94,7 +94,9 @@
                 <dd>{{ queue_info.waiting_regular }}</dd>
             </div>
         </dl>
+        {% if can(request, 'queue') %}
         <a class="btn btn-outline btn-block" href="/queue_management">{{ icon('list', 18) }} Go to the counter</a>
+        {% endif %}
     </aside>
 </div>
 

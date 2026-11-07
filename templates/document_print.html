@@ -123,19 +123,22 @@
         {% if voided %}
         <div class="toolbar-text is-void">{{ rec.control_number }} was voided{% if rec.void_reason %}: {{
             rec.void_reason }}{% endif %}. A voided document cannot be printed.</div>
-        <a class="btn btn-back" href="/documents/history">Back to issued documents</a>
+        {% if can(request, 'view_issued') %}<a class="btn btn-back" href="/documents/history">Back to issued documents</a>{% endif %}
         <button type="button" class="btn btn-print" disabled>Print</button>
         {% elif first %}
         <div class="toolbar-text">Saved as <strong>{{ rec.control_number }}</strong>. The print window opens by itself.
             If it did not, press Print again.</div>
-        {% if has_ticket %}<a class="btn btn-back" href="/queue_management">Back to queue</a>{% else %}<a
-            class="btn btn-back" href="/documents">Issue another</a>{% endif %}
-        <a class="btn btn-back" href="/documents/history">Issued documents</a>
+        {% if has_ticket and can(request, 'queue') %}
+        <a class="btn btn-back" href="/queue_management">Back to queue</a>
+        {% else %}
+        <a class="btn btn-back" href="/documents">Issue another</a>
+        {% endif %}
+        {% if can(request, 'view_issued') %}<a class="btn btn-back" href="/documents/history">Issued documents</a>{% endif %}
         <button type="button" class="btn btn-print" onclick="window.print()">Print again</button>
         {% else %}
         <div class="toolbar-text">Reprint of <strong>{{ rec.control_number }}</strong>, issued {{ rec.issue_date_text
             }}. It prints the saved text and design, not the current template.</div>
-        <a class="btn btn-back" href="/documents/history">Back to issued documents</a>
+        {% if can(request, 'view_issued') %}<a class="btn btn-back" href="/documents/history">Back to issued documents</a>{% endif %}
         <button type="button" class="btn btn-print" onclick="window.print()">Print</button>
         {% endif %}
         {% if design['items'] %}

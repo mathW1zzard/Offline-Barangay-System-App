@@ -256,7 +256,9 @@
     </dl>
     <div class="sys-actions">
         <button type="button" class="btn btn-primary" id="copy-details">{{ icon('clipboard', 18) }} Copy details</button>
+        {% if can(request, 'maintenance') %}
         <a class="btn btn-outline" href="/maintenance">{{ icon('database', 18) }} Backups and printer</a>
+        {% endif %}
         <span class="hint" id="copy-status" role="status"></span>
     </div>
 </section>
@@ -312,7 +314,7 @@
         <details>
             <summary>The queue slip does not print</summary>
             <p>Check that the printer is on, has paper, and its cable is plugged in. Then open
-                <a class="about-link" href="/maintenance">Maintenance</a>, choose the printer under Receipt printer,
+                {% if can(request, 'maintenance') %}<a class="about-link" href="/maintenance">Maintenance</a>{% else %}<strong>Maintenance</strong> (or ask the administrator){% endif %}, choose the printer under Receipt printer,
                 and press <strong>Print test slip</strong>.</p>
         </details>
         <details>

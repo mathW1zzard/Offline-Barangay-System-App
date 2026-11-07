@@ -76,8 +76,10 @@
                 <p class="counter-hint">The announcement plays and the display screen updates.</p>
                 {% else %}
                 <p class="counter-idle">Nobody is waiting. New visitors appear here after they are registered.</p>
+                {% if can(request, 'register') %}
                 <a class="btn btn-lg btn-on-dark" href="/client_registration">{{ icon('user-plus', 18) }} Register a
                     visitor</a>
+                {% endif %}
                 {% endif %}
             </div>
         </div>

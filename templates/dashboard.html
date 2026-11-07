@@ -56,7 +56,7 @@
                         <td>{{ badge(row.status) }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="4" class="empty-row">No tickets yet today. <a href="/client_registration">Register the first visitor</a> to start the queue.</td></tr>
+                    <tr><td colspan="4" class="empty-row">No tickets yet today.{% if can(request, 'register') %} <a href="/client_registration">Register the first visitor</a> to start the queue.{% endif %}</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

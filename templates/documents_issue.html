@@ -7,11 +7,11 @@
 {% block toasts %}{{ toast(message) }}{% endblock %}
 {% block content %}
 
-{{ documents_tabs('issue') }}
+{{ documents_tabs('issue', request) }}
 
 {% if names_missing %}
 <div class="alert alert-warn" role="status">A signatory name is not set yet, so documents signed by that person
-    cannot be printed. Fill in the names under <a href="/settings#signatories">Settings</a>.</div>
+    cannot be printed. Fill in the names under {% if can(request, 'settings') %}<a href="/settings#signatories">Settings</a>{% else %}Settings (ask the administrator){% endif %}.</div>
 {% endif %}
 
 <section class="card">

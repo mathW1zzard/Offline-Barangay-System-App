@@ -80,6 +80,21 @@ class Visit(Base):
     def service_label(self) -> str:
         return self.service.service_name if self.service else "Removed service"
     
+class Role(Base):
+    """A staff role (step 9a). The administrator names it and ticks what it may do (permissions.py).
+    Exactly one role is the built-in Administrator: it can do everything and can't be changed."""
+    __tablename__ = "roles"
+    __table_args__ = (
+        CheckConstraint("length(trim(name)) BETWEEN 1 AND 40", name="ck_roles_name"),
+        CheckConstraint("is_admin IN (0, 1)", name="ck_roles_is_admin"),
+    )
+    id = Column(Integer, primary_key=True)
+    name = Column(String(40, collation="NOCASE"), nullable=False, unique=True)
+    permissions = Column(String, nullable=False, default="", server_default="")   # "register,queue,..."
+    is_admin = Column(Boolean, nullable=False, default=False, server_default="0")
+    created_at = Column(DateTime, default=datetime.now)
+
+
 class Admin(Base):
     """A person who can log in. (The table keeps its old name, so nothing else has to change.)"""
     __tablename__ = "admins"
@@ -96,21 +111,7 @@ class Admin(Base):
     last_login_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.now)
     role = relationship("Role")
-
-class Role(Base):
-    """A staff role (step 9a). The administrator names it and ticks what it may do (permissions.py).
-    Exactly one role is the built-in Administrator: it can do everything and can't be changed."""
-    __tablename__ = "roles"
-    __table_args__ = (
-        CheckConstraint("length(trim(name)) BETWEEN 1 AND 40", name="ck_roles_name"),
-        CheckConstraint("is_admin IN (0, 1)", name="ck_roles_is_admin"),
-    )
-    id = Column(Integer, primary_key=True)
-    name = Column(String(40, collation="NOCASE"), nullable=False, unique=True)
-    permissions = Column(String, nullable=False, default="", server_default="")   # "register,queue,..."
-    is_admin = Column(Boolean, nullable=False, default=False, server_default="0")
-    created_at = Column(DateTime, default=datetime.now)
-
+    
 class AdminLog(Base):
     __tablename__ = "admin_logs"
 
@@ -520,7 +521,8 @@ def _v8_staff_roles(con):
     admin_role = con.execute("SELECT id FROM roles WHERE is_admin = 1").fetchone()[0]
     con.execute("UPDATE admins SET role_id = ? WHERE role_id IS NULL", (admin_role,))
     con.execute("UPDATE admins SET full_name = username WHERE full_name IS NULL OR trim(full_name) = ''")
-    
+
+
 MIGRATIONS = [_v1_counters_and_indexes, _v2_documents_settings_address, _v3_legacy_logo_flag, _v4_wording_options,
               _v5_pictures_and_design, _v6_spacing, _v7_sign_space, _v8_staff_roles]
 LATEST = len(MIGRATIONS)

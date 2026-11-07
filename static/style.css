@@ -504,6 +504,55 @@ select {
     background: var(--bg);
 }
 
+/* Who is signed in, at the top of the account menu (step 9a) */
+.menu-who {
+    display: grid;
+    gap: 2px;
+    padding: 10px 12px 12px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+}
+
+.menu-who strong {
+    font-size: 15px;
+    color: var(--text);
+}
+
+.menu-who span {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+/* "You don't have access to this page" (step 9a) */
+.no-access {
+    max-width: 640px;
+    margin: 40px auto;
+    text-align: center;
+}
+
+.no-access .no-access-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: var(--orange-soft);
+    color: var(--orange);
+    margin-bottom: 16px;
+}
+
+.no-access .card-title {
+    justify-content: center;
+}
+
+.no-access p {
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 8px 0 22px;
+}
+
 .content {
     flex: 1;
     width: 100%;
@@ -2708,14 +2757,6 @@ tbody tr.is-current:hover td {
     border-radius: 18px;
 }
 
-.logo-slot .row-actions {
-    flex-direction: column;
-}
-
-.logo-slot .row-actions .btn {
-    width: 100%;
-}
-
 .logo-box {
     height: 120px;
     display: grid;
@@ -3109,8 +3150,7 @@ fieldset.field legend {
 
 .tpl-body .tab {
     display: inline-block;
-    width: 28px;
-    /* the same width as the automatic indent in the preview */
+    width: 28px;            /* the same width as the automatic indent in the preview */
 }
 
 .tpl-signs.single {
