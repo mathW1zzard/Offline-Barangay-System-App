@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, badge, lane_tag %}
+{% from "_macros.html" import icon, badge, lane_tag, page_links %}
 {% block title %}Attendance{% endblock %}
 {% block page_title %}Attendance{% endblock %}
 {% block page_subtitle %}History and logs{% endblock %}
@@ -106,13 +106,7 @@ search}|urlencode %}
         <nav class="pagination" aria-label="Pages">
             <a class="page-btn{{ ' disabled' if page <= 1 }}"
                 href="/attendance?{{ qs }}&page={{ page - 1 if page > 1 else 1 }}">Previous</a>
-            {% for p in range(1, total_pages + 1) %}
-            {% if p == 1 or p == total_pages or (p - page)|abs <= 2 %} <a class="page-btn{{ ' active' if p == page }}"
-                href="/attendance?{{ qs }}&page={{ p }}" {% if p==page %} aria-current="page" {% endif %}>{{ p }}</a>
-                {% elif (p - page)|abs == 3 %}
-                <span class="page-gap">&hellip;</span>
-                {% endif %}
-                {% endfor %}
+            {{ page_links('/attendance?' ~ qs ~ '&page=', page, total_pages) }}
                 <a class="page-btn{{ ' disabled' if page >= total_pages }}"
                     href="/attendance?{{ qs }}&page={{ page + 1 if page < total_pages else total_pages }}">Next</a>
         </nav>

@@ -2777,6 +2777,18 @@ tbody tr.is-current:hover td {
     border-radius: 18px;
 }
 
+/* The two buttons under each logo stack, full width: side by side they need about 250px, more than a
+   card in the 760px dialog has (they stuck out over the next card). Also bigger targets. */
+.logo-slot .row-actions {
+    flex-direction: column;
+    margin-top: auto;
+}
+
+.logo-slot .row-actions .btn {
+    width: 100%;
+    justify-content: center;
+}
+
 .logo-box {
     height: 120px;
     display: grid;

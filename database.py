@@ -531,8 +531,23 @@ def _v9_audit_full_name(con):
     _add_column(con, "admin_logs", "admin_full_name", "VARCHAR")
 
 
+def _v10_issued_summary_index(con):
+    """Capacity test (8 Nov 2026): the totals on Issued documents read every certificate in full,
+    wording included (2.2 GB at 550,000 certificates). This index holds only the columns the totals
+    filters and search need (about 1/35 of that), so they read the index alone: 10.8 s -> 0.05 s on
+    the test copy. created_at is in it for the list (sorted newest first), control_number and
+    recipient for the search box. ANALYZE then records how the data is spread, so SQLite picks this
+    index for a one-document-type filter too (2.5 s -> 0.05 s). Both take about 2 s per 500,000
+    certificates, once."""
+    con.execute("CREATE INDEX IF NOT EXISTS ix_issued_documents_summary ON issued_documents "
+                "(issue_date, status, or_status, template_id, template_name, fee_centavos, created_at, "
+                "control_number, recipient)")
+    con.execute("ANALYZE")
+
+
 MIGRATIONS = [_v1_counters_and_indexes, _v2_documents_settings_address, _v3_legacy_logo_flag, _v4_wording_options,
-              _v5_pictures_and_design, _v6_spacing, _v7_sign_space, _v8_staff_roles, _v9_audit_full_name]
+              _v5_pictures_and_design, _v6_spacing, _v7_sign_space, _v8_staff_roles, _v9_audit_full_name,
+              _v10_issued_summary_index]
 LATEST = len(MIGRATIONS)
 
 def _has_table(db_file, name):
@@ -561,6 +576,45 @@ def _apply_migrations(db_file):
     finally:
         con.close()
 
+def _safety_copy(db_file, target):
+    """A complete copy through SQLite itself. A plain file copy can miss changes that are still in
+    the companion file (barangay_system.db-wal) in WAL mode, e.g. after a power cut."""
+    source = sqlite3.connect(db_file)
+    try:
+        dest = sqlite3.connect(target)
+        try:
+            source.backup(dest)
+            dest.execute("PRAGMA journal_mode=DELETE")   # one self-contained file, no -wal
+        finally:
+            dest.close()
+    finally:
+        source.close()
+
+
+def use_wal_mode(db_file):
+    """WAL mode: reading the database (a backup copy, a long report) no longer stops anyone from
+    saving. It is stored in the database file itself, so this only does work the first time.
+    Changes may sit in barangay_system.db-wal until they are merged into the main file; the app
+    merges them when it closes (see close_database)."""
+    con = sqlite3.connect(db_file, timeout=15)
+    try:
+        con.execute("PRAGMA journal_mode=WAL")
+    finally:
+        con.close()
+
+
+def close_database():
+    """At app close: merge barangay_system.db-wal into the main file and close every connection, so
+    the folder holds one complete barangay_system.db again (safe to copy or restore by hand)."""
+    try:
+        with engine.connect() as con:
+            con.exec_driver_sql("PRAGMA optimize")                  # keeps ANALYZE's figures up to date (cheap)
+            con.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception:
+        pass        # a backup still reading: SQLite merges the rest the next time it opens
+    engine.dispose()
+
+
 def run_migrations():
     db_file = data_path("barangay_system.db")
     existing = os.path.exists(db_file) and _has_table(db_file, "tickets")
@@ -569,10 +623,11 @@ def run_migrations():
         behind = con.execute("PRAGMA user_version").fetchone()[0] < LATEST
         con.close()
         if behind:   # safety copy before touching a real installation
-            shutil.copy2(db_file, f"{db_file}.before_v{LATEST}.bak")
+            _safety_copy(db_file, f"{db_file}.before_v{LATEST}.bak")
         _apply_migrations(db_file)
     Base.metadata.create_all(bind=engine)          # brand-new tables for fresh installs
     if not existing:
         _apply_migrations(db_file)                 # stamps the version on a fresh DB
+    use_wal_mode(db_file)
 
 run_migrations()

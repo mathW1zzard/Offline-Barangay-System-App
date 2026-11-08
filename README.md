@@ -145,9 +145,11 @@ All data lives on the office computer in `%LOCALAPPDATA%\Barangay_Queuing_Attend
 
 When a new version upgrades the database, it first saves a copy next to it (for example `barangay_system.db.before_v7.bak`). Documents already issued are never rewritten, so their reprints look the same as the original.
 
+The database runs in SQLite's WAL mode, so the daily backup is made in the background while people keep working. While the app is open you will also see `barangay_system.db-wal` and `barangay_system.db-shm`: they hold the newest changes and are merged into `barangay_system.db` when the app closes. To restore a backup by hand, close the app, delete those two files if they are still there, then copy the backup in and rename it `barangay_system.db`.
+
 ## Scope
 
-Built for **one office, one queue and one administrator** on one Windows PC. Each barangay sets its own name, logos, signatories and certificate designs. It has no multi-counter mode, no user roles beyond the administrator, and no online services.
+Built for **one office and one queue** on one shared Windows PC. Each person signs in with their own staff account, and the administrator decides what each role may do. Each barangay sets its own name, logos, signatories and certificate designs. It has no multi-counter mode, no network mode for several PCs, and no online services.
 
 ## Project layout
 

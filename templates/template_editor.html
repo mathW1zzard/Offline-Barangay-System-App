@@ -58,6 +58,11 @@
                     This wording has no {Control number}, so no control number will print on paper. Without a printed
                     number, a paper copy cannot be matched to your records. Use the Control number button to add it
                     wherever you want it.</p>
+                {#- Bug 1: a detail ticked under Extra fields is asked when issuing, but prints only if its field is in the wording -#}
+                <p class="hint hint-warn" id="unprinted-note"{% if not unprinted %} hidden{% endif %}>
+                    <span id="unprinted-text">{% if unprinted %}Asked when issuing, but not in the wording, so {{ 'it' if unprinted|length == 1 else 'they' }} will not
+                    print: {% for f in unprinted %}{{ '{' ~ f ~ '}' }}{{ ', ' if not loop.last }}{% endfor %}.{% endif %}</span>
+                    Add {{ 'it' if unprinted|length == 1 else 'them' }} with the buttons above, or untick the item under Extra fields if this document does not need it.</p>
                 <p class="field-error" id="tpl-error" role="alert"{% if not error %} hidden{% endif %}></p>
             </div>
 
@@ -470,6 +475,18 @@
         }
     }
 
+    // Bug 1: ticked details whose fields are not in the wording would be asked for but never printed
+    const unprintedNote = $('#unprinted-note');
+    function showUnprinted(fields) {
+        unprintedNote.hidden = fields.length === 0;
+        if (!fields.length) return;
+        const one = fields.length === 1;
+        $('#unprinted-text').textContent = 'Asked when issuing, but not in the wording, so ' + (one ? 'it' : 'they') +
+            ' will not print: ' + fields.map((f) => '{' + f + '}').join(', ') + '.';
+        unprintedNote.lastChild.textContent = ' Add ' + (one ? 'it' : 'them') +
+            ' with the buttons above, or untick the item under Extra fields if this document does not need it.';
+    }
+
     let timer = null;
     let latest = 0;
     async function refresh() {
@@ -483,6 +500,7 @@
             errorBox.textContent = data.error || '';
             errorBox.hidden = !data.error;
             numberNote.hidden = !!data.has_number;
+            showUnprinted(data.unprinted || []);
         } catch (e) {
             if (mine !== latest) return;
             errorBox.textContent = 'The preview could not be updated.';

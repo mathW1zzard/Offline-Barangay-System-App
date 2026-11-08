@@ -113,4 +113,5 @@ if __name__ == "__main__":
     server.should_exit = True        # ask uvicorn to finish in-flight requests
     thread.join(timeout=5)
     main.log_app_closed()
+    main.close_database()            # merge barangay_system.db-wal into the main file
     log.info("Application window closed")

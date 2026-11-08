@@ -65,6 +65,16 @@ def available_fields(extras, validity_on: bool) -> tuple:
     return tuple(fields)
 
 
+def unprinted_fields(body: str, extras) -> list:
+    """Fields of ticked Extra fields that the issue form asks for but the wording never uses: what the
+    secretary types for them would not print (Bug 1 of the acceptance test). In menu order.
+    The fee and OR number are left out: they also go in the issued-documents register, and they have
+    their own line at the bottom ("Print the fee and receipt number at the bottom of the document")."""
+    used = fields_used(body)
+    return [field for key in EXTRA_MENU if key in extras and key != "fee"
+            for field in EXTRA_MENU[key][1] if field not in used]
+
+
 def clean_extras(values) -> list:
     """Only keys from the menu, each once, in menu order."""
     return [key for key in EXTRA_MENU if key in set(values)]

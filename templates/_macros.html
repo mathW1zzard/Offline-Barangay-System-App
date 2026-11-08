@@ -196,6 +196,20 @@
 {%- endmacro %}
 
 {#- A keyboard shortcut hint inside a button. -#}
+{#- Page numbers: 1, the last page, and two either side of the current one, with ... between.
+    Only those few links are built: the old loop walked every page and wrote blank space for each
+    (184,000 pages = a 5 MB Audit log page in the capacity test). `href` ends with "page=". -#}
+{% macro page_links(href, page, total_pages) -%}
+{%- set lo = [page - 2, 2]|max -%}
+{%- set hi = [page + 2, total_pages - 1]|min -%}
+<a class="page-btn{{ ' active' if page == 1 }}" href="{{ href }}1"{% if page == 1 %} aria-current="page"{% endif %}>1</a>
+{% if lo > 2 %}<span class="page-gap">&hellip;</span>{% endif %}
+{% for p in range(lo, hi + 1) %}<a class="page-btn{{ ' active' if p == page }}" href="{{ href }}{{ p }}"{% if p == page %} aria-current="page"{% endif %}>{{ p }}</a>
+{% endfor %}
+{% if hi < total_pages - 1 %}<span class="page-gap">&hellip;</span>{% endif %}
+{% if total_pages > 1 %}<a class="page-btn{{ ' active' if page == total_pages }}" href="{{ href }}{{ total_pages }}"{% if page == total_pages %} aria-current="page"{% endif %}>{{ total_pages }}</a>{% endif %}
+{%- endmacro %}
+
 {% macro kbd(key) -%}<kbd class="kbd" aria-hidden="true">{{ key }}</kbd>{%- endmacro %}
 
 {% macro lane_tag(lane) -%}

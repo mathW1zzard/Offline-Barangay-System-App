@@ -9,7 +9,7 @@ from fastapi.responses import RedirectResponse, Response, FileResponse, JSONResp
 from app_logging import setup_logging, log
 setup_logging()
 from database import SessionLocal, Ticket, Service, Visit, Admin, AdminLog, Role, engine, DocumentTemplate, IssuedDocument
-from database import LATEST as DB_LATEST
+from database import LATEST as DB_LATEST, close_database   # close_database: called by run_app.py at exit
 from paths import resource_path, data_path, DATA_DIR
 import branding
 import permissions as perms
@@ -159,8 +159,12 @@ def current_priority_streak(db) -> int:
     """Consecutive Priority calls at the end of today's call order (0, 1 or 2).
     Derived from called_at, so a restart cannot reset it."""
     start = datetime.combine(date.today(), time.min)
+    # created_at is indexed and called_at is not: without the first condition this read the WHOLE
+    # attendance history on every call and every queue page. A visit called today was registered
+    # today (or just before midnight); older tickets are archived before the first call of the day.
     calls = (db.query(Ticket.lane, Ticket.called_at).filter(Ticket.called_at >= start).all()
-             + db.query(Visit.lane, Visit.called_at).filter(Visit.called_at >= start).all())
+             + db.query(Visit.lane, Visit.called_at).filter(Visit.created_at >= start - timedelta(days=1),
+                                                             Visit.called_at >= start).all())
     streak = 0
     for lane, _ in sorted(calls, key=lambda r: r[1], reverse=True)[:2]:
         if lane != "P":
@@ -363,6 +367,7 @@ def create_backup_file(target_dir: Path, prefix: str) -> Path:
             dest = sqlite3.connect(str(temp))
             try:
                 source.backup(dest)
+                dest.execute("PRAGMA journal_mode=DELETE")   # the copy: one self-contained file, no -wal
                 verdict = dest.execute("PRAGMA quick_check").fetchone()[0]
             finally:
                 dest.close()
@@ -455,6 +460,20 @@ def auto_backup(reason: str) -> bool:
         log_action("Database", "Backup Failed", f"{reason}: " + "; ".join(problems), username="system")
     return bool(saved)
 
+_backup_thread = None
+
+def start_daily_backup():
+    """The daily automatic backup, on its own thread, so the first click of the day is not kept
+    waiting (a large database takes from seconds to minutes to copy). Saving keeps working during
+    the copy because the database is in WAL mode (database.use_wal_mode). auto_backup never raises;
+    a copy cut short by closing the app is left as auto_*.tmp and removed by the next backup."""
+    global _backup_thread
+    if _backup_thread is not None and _backup_thread.is_alive():
+        return
+    _backup_thread = threading.Thread(target=auto_backup, args=("Daily Backup",),
+                                      name="daily-backup", daemon=True)
+    _backup_thread.start()
+
 def ensure_daily_rollover():
     """Runs the cleanup above once per calendar day, whenever the first page of that day is opened.
 
@@ -469,8 +488,8 @@ def ensure_daily_rollover():
         if last_rollover_date == today or monotonic() < rollover_retry_at:
             return
         if last_backup_attempt != today:
-          last_backup_attempt = today
-          auto_backup("Daily Backup")  
+            last_backup_attempt = today
+            start_daily_backup()        # in the background: this click does not wait for it
         try:
             archive_stale_tickets()
         except Exception:
@@ -2537,6 +2556,11 @@ def purge_old_records(request: Request, cutoff: str = Form(...)):
                     conn.execute(text("VACUUM"))
             except Exception:
                 log.exception("VACUUM failed")
+            try:   # VACUUM in WAL mode writes through barangay_system.db-wal: give that space back too
+                with engine.connect() as conn:
+                    conn.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
+            except Exception:
+                log.exception("Checkpoint after VACUUM failed")
             log_action("Database", "Data Purge",
                        f"Purged {deleted} attendance record(s) from before {cutoff_date.strftime('%b %d, %Y')}", request)
             flash(request, True, f"Purged {deleted} attendance record(s) from before {cutoff_date.strftime('%b %d, %Y')}.")
@@ -2905,6 +2929,7 @@ def render_template_editor(request: Request, row, form: dict | None = None, erro
         "core_fields": doc_templates.CORE_FIELDS, "extra_menu": doc_templates.EXTRA_MENU,
         "validity_field": doc_templates.VALIDITY_FIELD,
         "available": doc_templates.available_fields(shown["extras"], shown["use_validity"]),
+        "unprinted": doc_templates.unprinted_fields(shown["body"], shown["extras"]),
         "signer_options": signer_options(branding.get_branding()),
         "designs": designs, "design_mm": documents.DESIGN_MM, "layers": documents.LAYERS,
         "font_sizes": documents.FONT_SIZES, "print_design": documents.for_print(shown["design"]),
@@ -3066,7 +3091,8 @@ def preview_template(body: str = Form(""), default_fee: str = Form(""), use_vali
     example = branding.format_control_number(b["control_number_format"], prefix, date.today().year, 1)
     values = doc_templates.sample_values(b, fee, months, date.today(), control_number=example)
     return JSONResponse({"paragraphs": doc_templates.render_paragraphs(text, values, auto_bold == "1"),
-                         "error": error, "has_number": doc_templates.has_control_number(text)})
+                         "error": error, "has_number": doc_templates.has_control_number(text),
+                         "unprinted": doc_templates.unprinted_fields(text, extras)})
 
 # ---- loading a design: from a Word file, or from a picture of the whole blank page. The pictures are
 # stored at once (so the preview can show them); the template itself only changes on Save template.
@@ -3507,17 +3533,22 @@ def documents_history(request: Request, date_from: str = "", date_to: str = "", 
         no_or_count, no_or_total = live.filter(IssuedDocument.or_status == "not_available") \
             .with_entities(func.count(IssuedDocument.id), fees).one()
         money = doc_templates.format_pesos
-        by_day = live.with_entities(IssuedDocument.issue_date, IssuedDocument.template_name,
-                                    func.count(IssuedDocument.id), fees) \
-            .group_by(IssuedDocument.issue_date, IssuedDocument.template_name) \
-            .order_by(IssuedDocument.issue_date.desc(), IssuedDocument.template_name).all()
+        # Longer than about two months: summed by month. By day, seven years made a 7,500-row table.
+        monthly = (d_to - d_from).days > 62
+        when = func.strftime("%Y-%m", IssuedDocument.issue_date) if monthly else IssuedDocument.issue_date
+        by_day = live.with_entities(when, IssuedDocument.template_name, func.count(IssuedDocument.id), fees) \
+            .group_by(when, IssuedDocument.template_name) \
+            .order_by(when.desc(), IssuedDocument.template_name).all()
+        when_text = (lambda d: datetime.strptime(d, "%Y-%m").strftime("%b %Y")) if monthly \
+            else (lambda d: d.strftime("%b %d, %Y"))
         by_template = live.with_entities(IssuedDocument.template_name, func.count(IssuedDocument.id), fees) \
             .group_by(IssuedDocument.template_name).order_by(IssuedDocument.template_name).all()
         totals = {
             "issued_count": issued_count, "fees_text": money(fees_total),
             "voided_count": base.filter(IssuedDocument.status == "voided").count(),
             "no_or_count": no_or_count, "no_or_text": money(no_or_total),
-            "by_day": [{"date_text": d.strftime("%b %d, %Y"), "template_name": n, "count": c, "fees_text": money(f)}
+            "monthly": monthly,
+            "by_day": [{"date_text": when_text(d), "template_name": n, "count": c, "fees_text": money(f)}
                        for d, n, c, f in by_day],
             "by_template": [{"template_name": n, "count": c, "fees_text": money(f)} for n, c, f in by_template],
         }
@@ -3526,8 +3557,13 @@ def documents_history(request: Request, date_from: str = "", date_to: str = "", 
         page_number = parse_optional_int(page) or 1
         total_pages = max(1, math.ceil(total_records / PAGE_SIZE))
         page_number = max(1, min(page_number, total_pages))
-        records = (base.order_by(IssuedDocument.created_at.desc(), IssuedDocument.id.desc())
-                   .offset((page_number - 1) * PAGE_SIZE).limit(PAGE_SIZE).all())
+        # Sort and page through the ids only (the summary index has them), then load just those 15
+        # rows: sorting whole rows read every certificate's wording (11 s for a last page at 550,000).
+        newest_first = (IssuedDocument.created_at.desc(), IssuedDocument.id.desc())
+        page_ids = [i for (i,) in base.with_entities(IssuedDocument.id).order_by(*newest_first)
+                    .offset((page_number - 1) * PAGE_SIZE).limit(PAGE_SIZE).all()]
+        records = (db.query(IssuedDocument).filter(IssuedDocument.id.in_(page_ids))
+                   .order_by(*newest_first).all()) if page_ids else []
         rows = [{"id": r.id, "control_number": r.control_number, "template_id": r.template_id,
                  "template_name": r.template_name, "recipient": r.recipient, "address": r.address,
                  "issue_date_text": r.issue_date.strftime("%m/%d/%Y"),
