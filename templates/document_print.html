@@ -14,12 +14,26 @@
            certificate.css, shared with the live previews. */
         @page { margin: 0; }
 
+        /* The toolbar uses the app's own face and colours; the certificate below keeps certificate.css */
+        @font-face {
+            font-family: "Plus Jakarta Sans";
+            src: url("/static/fonts/PlusJakartaSans-VariableFont_wght.ttf") format("truetype");
+            font-weight: 200 800;
+            font-display: swap;
+        }
         :root {
             --navy: #1b2a4a;
-            --orange: #e87722;
-            --muted: #6b7690;
-            --line: #dfe3ec;
+            --ink: #142033;
+            --muted: #56657c;
+            --line: #dbe2ec;
             --red: #b91c1c;
+            --desk: #e6e8ec;
+            --paper: #ffffff;
+            --accent-fill: #c24f00;
+            --accent-fill-hover: #a84400;
+            --on-fill: #fffaf5;
+            --focus: #c24f00;
+            --sheet-shadow: 0 2px 14px rgba(27, 42, 74, .18);
         }
 
         * {
@@ -28,23 +42,23 @@
 
         body {
             margin: 0;
-            background: #e6e8ec;
-            color: var(--navy);
-            font-family: "Inter", "Segoe UI", system-ui, sans-serif;
-            font-size: 14px;
+            background: var(--desk);
+            color: var(--ink);
+            font-family: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
+            font-size: 15px;
         }
 
         .toolbar {
             position: sticky;
             top: 0;
             z-index: 5;
-            background: #fff;
+            background: var(--paper);
             border-bottom: 1px solid var(--line);
             display: flex;
             flex-wrap: wrap;
             align-items: center;
             gap: 12px;
-            padding: 10px 20px;
+            padding: 12px 24px;
         }
 
         .toolbar-text {
@@ -70,24 +84,39 @@
         }
 
         .btn {
-            border: 0;
-            border-radius: 6px;
-            padding: 9px 18px;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            padding: 8px 16px;
             font: inherit;
             font-weight: 700;
             cursor: pointer;
             text-decoration: none;
             display: inline-block;
+            transition: background-color 120ms, border-color 120ms;
+        }
+
+        .btn:focus-visible {
+            outline: 2px solid var(--focus);
+            outline-offset: 2px;
         }
 
         .btn-back {
-            background: #f3f4f6;
-            color: #000080;
+            background: var(--paper);
+            border-color: var(--line);
+            color: var(--navy);
+        }
+
+        .btn-back:hover {
+            border-color: var(--muted);
         }
 
         .btn-print {
-            background: var(--orange);
-            color: #fff;
+            background: var(--accent-fill);
+            color: var(--on-fill);
+        }
+
+        .btn-print:hover {
+            background: var(--accent-fill-hover);
         }
 
         .btn:disabled {
@@ -98,7 +127,7 @@
         /* On screen: the sheet of paper in the middle, with a shadow */
         .sheet-area .cert {
             margin: 24px auto 48px;
-            box-shadow: 0 2px 14px rgba(27, 42, 74, .18);
+            box-shadow: var(--sheet-shadow);
         }
 
         @media print {

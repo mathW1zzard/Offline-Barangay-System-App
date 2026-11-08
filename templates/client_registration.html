@@ -74,7 +74,7 @@
         </form>
     </section>
 
-    <aside class="card queue-glance" aria-labelledby="glance-title">
+    <aside class="queue-glance" aria-labelledby="glance-title">
         <h2 class="card-title" id="glance-title">Queue right now</h2>
         <dl class="glance-list">
             <div class="glance-row glance-now">
@@ -100,9 +100,9 @@
     </aside>
 </div>
 
-<section class="card">
+<section class="list-section" aria-labelledby="today-title">
     <div class="section-head">
-        <h2>Registered today <span class="count-pill">{{ total_today }}</span></h2>
+        <h2 id="today-title">Registered today <span class="count-pill">{{ total_today }}</span></h2>
     </div>
     <div class="table-wrap">
         <table>

@@ -11,38 +11,36 @@
 
 {{ documents_tabs('history', request) }}
 
-<section>
-    <div class="stat-grid">
-        <article class="stat-card">
-            <div class="stat-top"><span class="label">Documents issued</span><span class="stat-icon stat-orange">{{ icon('file-text', 22) }}</span></div>
-            <p class="stat-number">{{ totals.issued_count }}</p>
-        </article>
-        <article class="stat-card">
-            <div class="stat-top"><span class="label">Voided</span><span class="stat-icon stat-red">{{ icon('user-x', 22) }}</span></div>
-            <p class="stat-number">{{ totals.voided_count }}</p>
-        </article>
-        <article class="stat-card">
-            <div class="stat-top"><span class="label">Fees recorded</span><span class="stat-icon stat-green">{{ icon('check', 22) }}</span></div>
-            <p class="stat-number stat-money">{{ totals.fees_text }}</p>
-        </article>
-        <article class="stat-card">
-            <div class="stat-top"><span class="label">Collected without OR</span><span class="stat-icon stat-slate">{{ icon('alert', 22) }}</span></div>
-            <p class="stat-number stat-money">{{ totals.no_or_text }}</p>
-            <p class="hint">{{ totals.no_or_count }} document{{ '' if totals.no_or_count == 1 else 's' }}</p>
-        </article>
+{#- The four totals for the filters below, as one row of figures (no icons): the numbers are the point. -#}
+<dl class="figures" aria-label="Totals for these filters">
+    <div class="figure">
+        <dt>Documents issued</dt>
+        <dd>{{ totals.issued_count }}</dd>
     </div>
-</section>
+    <div class="figure">
+        <dt>Voided</dt>
+        <dd>{{ totals.voided_count }}</dd>
+    </div>
+    <div class="figure">
+        <dt>Fees recorded</dt>
+        <dd>{{ totals.fees_text }}</dd>
+    </div>
+    <div class="figure{{ ' figure-warn' if totals.no_or_count }}">
+        <dt>Collected without OR</dt>
+        <dd>{{ totals.no_or_text }}<span class="figure-note">{{ totals.no_or_count }} document{{ '' if totals.no_or_count == 1 else 's' }}</span></dd>
+    </div>
+</dl>
 
-<section class="card">
+<section class="list-section" aria-labelledby="issued-title">
     <div class="section-head">
-        <h2>Issued documents</h2>
+        <h2 id="issued-title">Issued documents</h2>
         <div class="row-actions">
             <a class="btn btn-outline" href="/documents/history/export?{{ qs }}" download>{{ icon('download', 18) }} Download list</a>
         </div>
     </div>
 
     <!--FILTERS-->
-    <form id="filter-form" method="get" action="/documents/history" class="filters">
+    <form id="filter-form" method="get" action="/documents/history" class="filters filters-row">
         <div class="field">
             <label for="date_from">From date</label>
             <input type="date" name="date_from" id="date_from" value="{{ date_from }}">
@@ -83,8 +81,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>Control no.</th>
-                    <th>Date</th>
+                    <th>Control no. and date</th>
                     <th>Client</th>
                     <th>Document</th>
                     <th>Fee</th>
@@ -96,11 +93,10 @@
             <tbody>
                 {% for d in rows %}
                 <tr{% if d.voided %} class="row-muted"{% endif %}>
-                    <td class="cell-primary">{{ d.control_number }}</td>
-                    <td>{{ d.issue_date_text }}</td>
+                    <td class="cell-num"><span class="cell-primary">{{ d.control_number }}</span><span class="cell-sub">{{ d.issue_date_text }}</span></td>
                     <td><span class="cell-primary">{{ d.recipient }}</span>{% if d.address %}<span class="cell-sub">{{ d.address }}</span>{% endif %}</td>
                     <td>{{ d.template_name }}</td>
-                    <td>{{ d.fee_text }}</td>
+                    <td class="cell-num">{{ d.fee_text }}</td>
                     <td>{% if d.or_status == 'provided' %}OR {{ d.or_number }}{% elif d.or_status == 'not_available' %}<span class="tag tag-warn">Not available</span>{% else %}--{% endif %}</td>
                     <td>{{ badge('Voided' if d.voided else 'Issued') }}</td>
                     <td>
@@ -122,7 +118,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="8" class="empty-row">No documents match these filters.</td></tr>
+                <tr><td colspan="7" class="empty-row">No documents match these filters. Try a wider date range or clear the search.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

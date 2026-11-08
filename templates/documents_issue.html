@@ -14,20 +14,29 @@
     cannot be printed. Fill in the names under {% if can(request, 'settings') %}<a href="/settings#signatories">Settings</a>{% else %}Settings (ask the administrator){% endif %}.</div>
 {% endif %}
 
-<section class="card">
-    <h2 class="card-title">{% if client_name %}Which document for {{ client_name }}?{% else %}Which document do you want
-        to issue?{% endif %}</h2>
-    <div class="doc-cards">
-        {% for t in items %}
-        <a class="doc-card" href="/documents/issue/{{ t.id }}{{ suffix }}">
-            <span class="doc-card-icon">{{ icon('file-text', 40) }}</span>
-            <span class="doc-card-name">{{ t.name }}</span>
-            <span class="doc-card-meta">{{ t.fee_text }}</span>
-        </a>
-        {% else %}
-        <p class="empty-note" style="color: var(--muted)">No documents are turned on. Turn one on under the Templates
-            tab.</p>
-        {% endfor %}
+{#- One row per document: the whole row opens its form. A list keeps working as the barangay adds its own
+    documents, and shows what staff need before choosing: the number prefix and the usual fee. -#}
+<section class="list-section" aria-labelledby="pick-title">
+    <div class="section-head">
+        <h2 id="pick-title">{% if client_name %}Which document for {{ client_name }}?{% else %}Which document do you want
+            to issue?{% endif %}</h2>
     </div>
+    {% if items %}
+    <ul class="doc-list">
+        {% for t in items %}
+        <li>
+            <a class="doc-row" href="/documents/issue/{{ t.id }}{{ suffix }}">
+                <span class="doc-row-icon">{{ icon('file-text', 22) }}</span>
+                <span class="doc-row-name">{{ t.name }}</span>
+                <span class="doc-row-meta">{% if t.prefix %}Numbers start <strong class="cell-num">{{ t.prefix }}</strong>{% endif %}</span>
+                <span class="doc-row-meta doc-row-fee">{{ t.fee_text }}</span>
+                <span class="doc-row-action" aria-hidden="true">Issue</span>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-row">No documents are turned on. Turn one on under the Templates tab.</p>
+    {% endif %}
 </section>
 {% endblock %}

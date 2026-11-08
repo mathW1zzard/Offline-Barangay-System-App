@@ -157,6 +157,19 @@
     {%- elif name == 'x' -%}
     <path d="M18 6 6 18" />
     <path d="m6 6 12 12" />
+    {%- elif name == 'indent' -%}
+    <polyline points="3 8 7 12 3 16" />
+    <line x1="21" x2="11" y1="12" y2="12" />
+    <line x1="21" x2="11" y1="6" y2="6" />
+    <line x1="21" x2="11" y1="18" y2="18" />
+    {%- elif name == 'align-center' -%}
+    <line x1="21" x2="3" y1="6" y2="6" />
+    <line x1="17" x2="7" y1="12" y2="12" />
+    <line x1="19" x2="5" y1="18" y2="18" />
+    {%- elif name == 'align-right' -%}
+    <line x1="21" x2="3" y1="6" y2="6" />
+    <line x1="21" x2="9" y1="12" y2="12" />
+    <line x1="21" x2="7" y1="18" y2="18" />
     {%- elif name == 'clock' -%}
     <circle cx="12" cy="12" r="10" />
     <polyline points="12 6 12 12 16 14" />
@@ -170,10 +183,10 @@
 </svg>
 {%- endmacro %}
 
-{#- Status badge. waiting and active (services) pulse; every other status is a still dot. -#}
+{#- Status badge: the word carries the status, on a tinted pill (no decorative dot). -#}
 {% macro badge(status, label=None) -%}
 {%- set key = (status|string)|lower|replace(' ', '_') -%}
-<span class="badge badge-{{ key }}"><span class="dot{{ ' dot-pulse' if key in ('waiting', 'active') }}"></span>{{ label
+<span class="badge badge-{{ key }}">{{ label
     or (key.replace('_', ' ')|title) }}</span>
 {%- endmacro %}
 

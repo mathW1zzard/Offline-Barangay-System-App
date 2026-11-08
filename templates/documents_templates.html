@@ -9,9 +9,9 @@
 
 {{ documents_tabs('templates', request) }}
 
-<section class="card">
+<section class="list-section" aria-labelledby="templates-title">
     <div class="section-head">
-        <h2>Document templates</h2>
+        <h2 id="templates-title">Document templates</h2>
         <form action="/documents/templates/new" method="post">
             <button type="submit" class="btn btn-primary">{{ icon('plus', 18) }} New template</button>
         </form>
@@ -40,10 +40,10 @@
                     <td>
                         <span class="cell-primary">{{ t.name }}</span>
                         <span class="tag tag-regular">{{ 'Built-in' if t.builtin else 'Custom' }}</span>
-                        {% if t.customized %}<span class="tag tag-priority">Wording changed</span>{% endif %}
+                        {% if t.customized %}<span class="tag tag-warn">Wording changed</span>{% endif %}
                     </td>
-                    <td>{{ t.code_prefix }}</td>
-                    <td>{{ t.fee_text }}</td>
+                    <td class="cell-num">{{ t.code_prefix }}</td>
+                    <td class="cell-num">{{ t.fee_text }}</td>
                     <td>{{ t.services|join(', ') if t.services else '--' }}</td>
                     <td>{{ badge('Active' if t.active else 'Inactive') }}</td>
                     <td>
@@ -51,17 +51,17 @@
                             <a class="btn btn-sm btn-outline" href="/documents/templates/{{ t.id }}/edit">{{
                                 icon('pencil', 16) }} Edit</a>
                             <form action="/documents/templates/{{ t.id }}/duplicate" method="post">
-                                <button type="submit" class="btn btn-sm btn-outline">Duplicate</button>
+                                <button type="submit" class="btn btn-sm btn-text">Duplicate</button>
                             </form>
                             {% if t.active %}
-                            <button type="button" class="btn btn-sm btn-outline" data-confirm
+                            <button type="button" class="btn btn-sm btn-text" data-confirm
                                 data-action="/documents/templates/{{ t.id }}/deactivate"
                                 data-title="Turn off this document?"
                                 data-message="{% if t.services %}{{ t.name }} is used by: {{ t.services|join(', ') }}. Those services will no longer show a Prepare document button. {% else %}{{ t.name }} will no longer be offered when issuing documents. {% endif %}You can turn it on again at any time."
                                 data-label="Turn off">Turn off</button>
                             {% else %}
                             <form action="/documents/templates/{{ t.id }}/activate" method="post">
-                                <button type="submit" class="btn btn-sm btn-outline">Turn on</button>
+                                <button type="submit" class="btn btn-sm btn-text">Turn on</button>
                             </form>
                             {% endif %}
                             {% if not t.builtin %}

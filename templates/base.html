@@ -93,12 +93,10 @@
                     {% if can(request, 'queue') %}
                     <a class="queue-pill{{ ' is-empty' if not in_queue }}" href="/queue_management"
                         title="Waiting, called and skipped tickets today. Opens Queue Management.">
-                        <span class="dot{{ ' dot-pulse' if in_queue }}"></span>
                         <strong>{{ in_queue }}</strong> in queue
                     </a>
                     {% else %}
                     <span class="queue-pill{{ ' is-empty' if not in_queue }}" title="Waiting, called and skipped tickets today.">
-                        <span class="dot{{ ' dot-pulse' if in_queue }}"></span>
                         <strong>{{ in_queue }}</strong> in queue
                     </span>
                     {% endif %}

@@ -18,8 +18,8 @@
 <div class="editor-layout">
     <section class="card">
         <h2 class="card-title">{{ icon('file-text', 22) }} {{ t.name }}</h2>
-        <p class="hint"><a href="/documents" id="choose-another">Choose another document</a>
-            {% if copy_of %} &middot; This is a corrected copy of a voided document.{% endif %}</p>
+        <p class="hint"><a href="/documents" id="choose-another">Choose another document</a></p>
+        {% if copy_of %}<p class="hint">This is a corrected copy of a voided document.</p>{% endif %}
         {% if error %}<div class="alert alert-error" role="alert" style="margin-top: 16px">{{ error }}</div>{% endif %}
 
         <form action="/documents/issue/{{ t.id }}" method="post" class="form" id="form-issue" style="margin-top: 16px">
@@ -28,6 +28,8 @@
             <input type="hidden" name="ticket_date" value="{{ ticket_date }}">
             <input type="hidden" name="copy_of" value="{{ copy_of }}">
 
+            <fieldset class="form-group">
+                <legend>Client</legend>
             <div class="field">
                 <label for="client_name">Client full name</label>
                 <input type="text" name="client_name" id="client_name" value="{{ shown.client_name }}" maxlength="100"
@@ -38,19 +40,6 @@
                         class="hint">(optional)</span>{% endif %}</label>
                 <input type="text" name="address" id="address" value="{{ shown.address }}" maxlength="150"
                     autocomplete="off" {% if required.address %} required{% endif %}>
-            </div>
-            <div class="field">
-                <label for="purpose">Purpose, for example employment{% if not required.purpose %} <span
-                        class="hint">(optional)</span>{% endif %}</label>
-                <input type="text" name="purpose" id="purpose" value="{{ shown.purpose }}" maxlength="150"
-                    autocomplete="off" {% if required.purpose %} required{% endif %}{% if shown.client_name %}
-                    autofocus{% endif %}>
-            </div>
-            <div class="field">
-                <label for="issue_date">Date of issue</label>
-                <input type="date" name="issue_date" id="issue_date" value="{{ shown.issue_date }}" max="{{ today }}"
-                    required>
-                <p class="hint">Keep today's date unless you are recording a document that was issued earlier.</p>
             </div>
 
             {% if 'age' in t.extras or 'civil_status' in t.extras or 'nationality' in t.extras or 'years' in t.extras %}
@@ -114,6 +103,23 @@
             </fieldset>
             {% endif %}
 
+            </fieldset>
+
+            <fieldset class="form-group">
+                <legend>Document</legend>
+            <div class="field">
+                <label for="purpose">Purpose, for example employment{% if not required.purpose %} <span
+                        class="hint">(optional)</span>{% endif %}</label>
+                <input type="text" name="purpose" id="purpose" value="{{ shown.purpose }}" maxlength="150"
+                    autocomplete="off" {% if required.purpose %} required{% endif %}{% if shown.client_name %}
+                    autofocus{% endif %}>
+            </div>
+            <div class="field">
+                <label for="issue_date">Date of issue</label>
+                <input type="date" name="issue_date" id="issue_date" value="{{ shown.issue_date }}" max="{{ today }}"
+                    required>
+                <p class="hint">Keep today's date unless you are recording a document that was issued earlier.</p>
+            </div>
             <div class="field">
                 <label for="signers">Signed by</label>
                 <select name="signers" id="signers">
@@ -124,8 +130,10 @@
                 <p class="hint">Starts on the usual choice for this document. Change it only for this one if needed.</p>
             </div>
 
-            <fieldset class="field">
-                <legend>Fee</legend>
+            </fieldset>
+
+            <fieldset class="form-group">
+                <legend>Fee and receipt</legend>
                 <div class="field">
                     <label for="fee">Fee (pesos). Leave at 0 if there is no fee.</label>
                     <input type="text" name="fee" id="fee" value="{{ shown.fee }}" inputmode="decimal"

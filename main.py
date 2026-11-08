@@ -3259,7 +3259,7 @@ def documents_picker(request: Request, client_name: str = "", address: str = "",
     carry = carry_params(client_name, address, ticket_number, ticket_date)
     message = request.session.pop("flash", None)
     with SessionLocal() as db:
-        items = [{"id": t.id, "name": t.name,
+        items = [{"id": t.id, "name": t.name, "prefix": t.code_prefix,
                   "fee_text": doc_templates.format_pesos(t.default_fee_centavos) if t.default_fee_centavos else "No fee"}
                  for t in db.query(DocumentTemplate).filter(DocumentTemplate.is_active.is_(True))
                               .order_by(DocumentTemplate.id).all()]
