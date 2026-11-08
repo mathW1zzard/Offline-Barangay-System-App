@@ -244,7 +244,11 @@
             e.preventDefault();   // second click / second Enter press: ignore it
             return;
         }
-        lockForm(form);
+        form.dataset.submitting = '1';
+        setTimeout(() => {
+            if (e.defaultPrevented) delete form.dataset.submitting;
+            else lockForm(form);
+        }, 0);
     }, true);
 
     // Pressing the browser's Back button can restore the page frozen with locked buttons

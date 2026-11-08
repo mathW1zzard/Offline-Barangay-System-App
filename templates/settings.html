@@ -28,9 +28,15 @@
 {% endmacro %}
 
 {% block content %}
-{% if not values.signatory_captain_name or not values.signatory_secretary_name %}
-<div class="alert alert-warn" role="status">The names of the Barangay Captain and Secretary are not filled in yet. Fill
-    them in under <a href="#signatories">Signatories</a> so they can appear on printouts.</div>
+{% set unnamed = [] %}
+{% if not values.signatory_captain_name %}{% set _ = unnamed.append(values.signatory_captain_title or 'Barangay Captain') %}{% endif %}
+{% if not values.signatory_secretary_name %}{% set _ = unnamed.append(values.signatory_secretary_title or 'Barangay Secretary') %}{% endif %}
+{% if unnamed|length == 2 %}
+<div class="alert alert-warn" role="status">The names of the {{ unnamed[0] }} and {{ unnamed[1] }} are not filled in
+    yet. Fill them in under <a href="#signatories">Signatories</a> so they can appear on printouts.</div>
+{% elif unnamed %}
+<div class="alert alert-warn" role="status">The name of the {{ unnamed[0] }} is not filled in yet. Fill it in under
+    <a href="#signatories">Signatories</a> so it can appear on printouts.</div>
 {% endif %}
 
 {% if 'logos' in values.wizard_later.split(',') and not (logos.values()|selectattr('url')|list) %}
