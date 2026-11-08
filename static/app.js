@@ -506,6 +506,8 @@
         let lastActive = Date.now();
         let lastPing = Date.now();          // opening this page already counted as activity
         let leaving = false;
+        let askedAt = 0;                    // when the server last said how long nobody has been active
+        let asking = false;                 // waiting for that answer: decide nothing until it comes
 
         const tellServer = () => {
             lastPing = Date.now();
@@ -529,9 +531,35 @@
         $('#idle-stay').addEventListener('click', stillHere);
         idleDialog.addEventListener('cancel', (e) => { e.preventDefault(); stillHere(); });   // Esc = still here
 
+        // Before warning or logging out, check with the server. This page's own clock can be wrong:
+        // pressing Back can bring it back from the browser's memory still counting from when the person
+        // left it, while they were busy on another page the whole time. The server saw that activity.
+        const askServer = () => {
+            asking = true;
+            fetch('/still-here', { method: 'POST', body: new URLSearchParams({ only_check: '1' }) })
+                .then((res) => {
+                    if (res.status === 401) { leaving = true; location.href = '/login'; return null; }
+                    return res.json();
+                })
+                .then((data) => {
+                    if (!data || leaving) return;
+                    const serverIdleMs = data.idle_seconds * 1000;
+                    if (serverIdleMs < Date.now() - lastActive) {        // active elsewhere: catch up
+                        lastActive = Date.now() - serverIdleMs;
+                        if (Date.now() - lastActive < LIMIT_MS - WARN_MS && idleDialog.open) idleDialog.close();
+                    }
+                })
+                .catch(() => {})            // no answer (app closing): this page's own clock decides
+                .finally(() => { asking = false; askedAt = Date.now(); });
+        };
+
         setInterval(() => {
-            if (leaving) return;
+            if (leaving || asking) return;
             const idle = Date.now() - lastActive;
+            if (idle >= LIMIT_MS - WARN_MS && Date.now() - askedAt > WARN_MS) {
+                askServer();                // decide on the next tick, with the server's answer
+                return;
+            }
             if (idle >= LIMIT_MS) {          // also true right after the PC wakes from sleep
                 leaving = true;
                 $('#idle-logout-form').submit();

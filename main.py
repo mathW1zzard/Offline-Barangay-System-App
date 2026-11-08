@@ -962,14 +962,20 @@ def sign_out(request: Request, action: str, description: str, notice: str = "", 
 
 
 @app.post("/still-here")
-def still_here(request: Request):
+def still_here(request: Request, only_check: str = Form("")):
     """The page's quiet "still active" signal (static/app.js), sent at most every 30 seconds while
-    someone clicks or types. Typing one long form without opening another page still counts."""
+    someone clicks or types. Typing one long form without opening another page still counts.
+    With only_check=1 the page just asks "how long since the last activity?" before it warns or logs
+    out: activity on another page (e.g. before pressing Back) is known here, not on that page."""
+    seen_before = request.session.get("seen")
     try:
         check_signed_in(request)              # saves the time as activity, or signs out if it is too late
     except NotAuthenticated:
         return JSONResponse({"signed_in": False}, status_code=401)
-    return JSONResponse({"signed_in": True})
+    if only_check and seen_before:
+        request.session["seen"] = seen_before  # asking is not activity
+        return JSONResponse({"signed_in": True, "idle_seconds": max(0, datetime.now().timestamp() - seen_before)})
+    return JSONResponse({"signed_in": True, "idle_seconds": 0})
 
 
 @app.post("/logout")
