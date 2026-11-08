@@ -9,9 +9,9 @@
 {% set qs = {'date_from': date_from, 'date_to': date_to, 'lane': lane, 'service_id': service_id or '', 'q':
 search}|urlencode %}
 
-<section class="card">
+<section class="list-section" aria-labelledby="attendance-title">
     <div class="section-head">
-        <h2>Client attendance</h2>
+        <h2 id="attendance-title">Client attendance</h2>
         <div class="row-actions">
             <a class="btn btn-outline" href="/attendance/export?{{ qs }}" download>{{ icon('download', 18) }} Download
                 attendance</a>
@@ -21,7 +21,7 @@ search}|urlencode %}
     </div>
 
     <!--FILTERS-->
-    <form id="filter-form" method="get" action="/attendance" class="filters">
+    <form id="filter-form" method="get" action="/attendance" class="filters filters-row filters-attendance">
         <div class="range-row" role="group" aria-label="Quick date range">
             <span class="range-label">Show</span>
             <button type="button" class="range-btn" data-range="today">Today</button>

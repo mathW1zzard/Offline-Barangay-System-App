@@ -6,37 +6,33 @@
 {% block page_subtitle %}Overview for today{% endblock %}
 
 {% block content %}
-<!--PERFORMANCE SNAPSHOT-->
-<section>
-    <div class="section-head">
-        <h2>Today at a glance</h2>
-        <p class="date-note">{{ icon('calendar', 18) }} {{ today_label }}</p>
+{#- Today's four counts as one row of figures: the numbers are the point, so no icons and no box per number.
+    The page subtitle already says "Overview for today", so there is no separate date line. -#}
+<dl class="figures" aria-label="Today at a glance">
+    <div class="figure">
+        <dt>Tickets issued today</dt>
+        <dd>{{ total_count }}</dd>
     </div>
-
-    <div class="stat-grid">
-        <article class="stat-card">
-            <div class="stat-top"><span class="label">Tickets issued today</span><span class="stat-icon stat-orange">{{ icon('file-chart', 22) }}</span></div>
-            <p class="stat-number">{{ total_count }}</p>
-        </article>
-        <article class="stat-card">
-            <div class="stat-top"><span class="label">Waiting</span><span class="stat-icon stat-slate">{{ icon('user', 22) }}</span></div>
-            <p class="stat-number">{{ waiting_count }}</p>
-        </article>
-        <article class="stat-card">
-            <div class="stat-top"><span class="label">Completed</span><span class="stat-icon stat-green">{{ icon('check', 22) }}</span></div>
-            <p class="stat-number">{{ completed_count }}</p>
-        </article>
-        <article class="stat-card">
-            <div class="stat-top"><span class="label">No-show</span><span class="stat-icon stat-red">{{ icon('user-x', 22) }}</span></div>
-            <p class="stat-number">{{ no_show_count }}</p>
-        </article>
+    <div class="figure">
+        <dt>Waiting</dt>
+        <dd>{{ waiting_count }}</dd>
     </div>
-</section>
+    <div class="figure">
+        <dt>Completed</dt>
+        <dd>{{ completed_count }}</dd>
+    </div>
+    <div class="figure">
+        <dt>No-show</dt>
+        <dd>{{ no_show_count }}</dd>
+    </div>
+</dl>
 
 <div class="dash-grid">
     <!--LIVE ACTIVITY-->
-    <section class="card">
-        <h2 class="card-title">Live queue</h2>
+    <section class="list-section" aria-labelledby="latest-title">
+        <div class="section-head">
+            <h2 id="latest-title">Latest tickets today</h2>
+        </div>
         <div class="table-wrap">
             <table>
                 <thead>
@@ -64,8 +60,10 @@
     </section>
 
     <!--SERVICES VOLUME-->
-    <section class="card">
-        <h2 class="card-title">Tickets by service</h2>
+    <section class="chart-section" aria-labelledby="by-service-title">
+        <div class="section-head">
+            <h2 id="by-service-title">Tickets by service</h2>
+        </div>
         <div class="donut-wrap">
             <div class="donut" id="donut">
                 <svg viewBox="0 0 200 200" role="img" aria-label="Share of today's tickets by service"></svg>

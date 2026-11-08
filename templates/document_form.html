@@ -18,7 +18,7 @@
 <div class="editor-layout">
     <section class="card">
         <h2 class="card-title">{{ icon('file-text', 22) }} {{ t.name }}</h2>
-        <p class="hint"><a href="/documents" id="choose-another">Choose another document</a></p>
+        <p><a href="/documents" id="choose-another" class="back-link">{{ icon('arrow-left', 18) }} Choose another document</a></p>
         {% if copy_of %}<p class="hint">This is a corrected copy of a voided document.</p>{% endif %}
         {% if error %}<div class="alert alert-error" role="alert" style="margin-top: 16px">{{ error }}</div>{% endif %}
 

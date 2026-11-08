@@ -32,7 +32,7 @@
     --card: #ffffff;
     --line: #e2e8f0;
     --text: #0f172a;
-    --muted: #64748b;
+    --muted: #5a6a80;
     --faint: #94a3b8;
     --green: #16a34a;
     --green-dark: #15803d;
@@ -81,6 +81,14 @@
     --on-dark-edge: rgba(255, 255, 255, .18);
     --on-dark-hairline: rgba(255, 255, 255, .06);
     --amber-on-dark: #fcd34d;
+    --on-dark-nav: #c3cede;
+    --on-dark-faint: #8193ad;
+    --on-dark-wash-3: rgba(255, 255, 255, .16);
+    --on-dark-line: rgba(255, 255, 255, .22);
+    --on-dark-line-strong: rgba(255, 255, 255, .4);
+    --red-on-dark: #fca5a5;
+    --red-on-dark-edge: rgba(252, 165, 165, .45);
+    --red-on-dark-wash: rgba(220, 38, 38, .18);
     --count-bg: rgba(100, 116, 139, .18);
     --toast-ok-icon: #4ade80;
     --toast-error-bg: #7f1d1d;
@@ -347,7 +355,7 @@ select {
 }
 
 .brand-text p {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--faint);
     line-height: 1.35;
     margin-top: 2px;
@@ -368,9 +376,9 @@ select {
 
 .nav-heading {
     padding: 0 16px 4px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
-    color: #8193ad;
+    color: var(--on-dark-faint);
 }
 
 .sidebar-foot {
@@ -378,7 +386,7 @@ select {
     flex-direction: column;
     gap: 12px;
     padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, .1);
+    border-top: 1px solid var(--on-dark-wash-2);
 }
 
 .nav-button {
@@ -392,8 +400,8 @@ select {
 
 .copyright {
     padding: 0 16px;
-    font-size: 12px;
-    color: #8193ad;
+    font-size: 13px;
+    color: var(--on-dark-faint);
 }
 
 .nav-link {
@@ -402,7 +410,7 @@ select {
     gap: 12px;
     padding: 8px 16px;
     border-radius: 10px;
-    color: #c3cede;
+    color: var(--on-dark-nav);
     font-size: 14px;
     font-weight: 600;
     text-decoration: none;
@@ -410,7 +418,7 @@ select {
 }
 
 .nav-link:hover {
-    background: rgba(255, 255, 255, .07);
+    background: var(--on-dark-wash);
     color: var(--on-dark);
     cursor: pointer;
 }
@@ -771,25 +779,25 @@ select {
 }
 
 .btn-on-dark {
-    background: rgba(255, 255, 255, .08);
-    border-color: rgba(255, 255, 255, .22);
+    background: var(--on-dark-wash);
+    border-color: var(--on-dark-line);
     color: var(--on-dark);
 }
 
 .btn-on-dark:hover {
-    background: rgba(255, 255, 255, .16);
-    border-color: rgba(255, 255, 255, .4);
+    background: var(--on-dark-wash-3);
+    border-color: var(--on-dark-line-strong);
 }
 
 .btn-on-dark-danger {
     background: transparent;
-    border-color: rgba(252, 165, 165, .45);
-    color: #fca5a5;
+    border-color: var(--red-on-dark-edge);
+    color: var(--red-on-dark);
 }
 
 .btn-on-dark-danger:hover {
-    background: rgba(220, 38, 38, .18);
-    border-color: #fca5a5;
+    background: var(--red-on-dark-wash);
+    border-color: var(--red-on-dark);
 }
 
 .kbd {
@@ -800,13 +808,13 @@ select {
     padding: 0 4px;
     margin-left: 4px;
     border-radius: 6px;
-    background: rgba(255, 255, 255, .22);
+    background: var(--on-dark-line);
     font: 700 12px/1 inherit;
     font-family: inherit;
 }
 
 .btn-on-dark .kbd {
-    background: rgba(255, 255, 255, .14);
+    background: var(--on-dark-wash-2);
 }
 
 .btn-sm {
@@ -866,8 +874,8 @@ select {
     border: 2px solid var(--line);
     border-radius: var(--radius-btn);
     font-size: 16px;
-    min-height: 50px;
-    transition: border-color .15s, box-shadow .15s;
+    height: 52px;
+    transition: border-color var(--dur-micro);
 }
 
 input:hover,
@@ -1214,82 +1222,28 @@ tbody tr:hover .empty-row {
 }
 
 /* ---------------------------------------------------------------- dashboard */
-.stat-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-}
-
-.stat-card {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-card);
-    padding: 20px 24px;
-}
-
-.date-note {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--muted);
-}
-
-.stat-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-}
-
-.stat-top .label {
-    line-height: 1.3;
-}
-
-.stat-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 14px;
-    display: grid;
-    place-items: center;
-    flex: none;
-}
-
-.stat-orange {
-    background: var(--orange-soft);
-    color: var(--orange);
-}
-
-.stat-slate {
-    background: var(--slate-tint);
-    color: var(--slate-ink);
-}
-
-.stat-green {
-    background: var(--green-tint);
-    color: var(--green);
-}
-
-.stat-red {
-    background: var(--red-tint);
-    color: var(--red);
-}
-
-.stat-number {
-    margin-top: 10px;
-    font-variant-numeric: tabular-nums;
-    font-size: 42px;
-    font-weight: 800;
-    line-height: 1;
-    letter-spacing: -.02em;
-}
-
 .dash-grid {
     display: grid;
     grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-    gap: 20px;
+    gap: 32px;
     align-items: start;
+}
+
+/* The chart sits on the page like the list beside it: a heading, one rule, then the chart */
+.chart-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 8px;
+}
+
+.chart-section > .section-head {
+    margin-bottom: 0;
+}
+
+.chart-section > .donut-wrap {
+    padding-top: 24px;
+    border-top: 1px solid var(--line-strong);
 }
 
 .donut-wrap {
@@ -1314,7 +1268,7 @@ tbody tr:hover .empty-row {
 
 .donut-seg {
     cursor: pointer;
-    transition: stroke-width .2s, opacity .2s;
+    transition: stroke-width var(--dur-short), opacity var(--dur-short);
 }
 
 .donut-seg.is-active {
@@ -1342,6 +1296,8 @@ tbody tr:hover .empty-row {
     font-weight: 800;
     line-height: 1.05;
     letter-spacing: -.02em;
+    color: var(--heading);
+    font-variant-numeric: tabular-nums;
 }
 
 .donut-label {
@@ -1365,13 +1321,19 @@ tbody tr:hover .empty-row {
 
 .legend-row {
     display: grid;
-    grid-template-columns: 14px 1fr auto 52px;
+    grid-template-columns: 12px minmax(0, 1fr) auto 48px;
     align-items: center;
     gap: 12px;
-    padding: 10px 12px;
-    border-radius: 12px;
+    min-height: 40px;
+    padding: 8px 12px;
+    border-radius: 8px;
     font-size: 15px;
-    transition: background-color .15s;
+    transition: background-color var(--dur-micro);
+}
+
+.legend-row:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
 }
 
 .legend-row:not(.is-zero) {
@@ -1380,13 +1342,13 @@ tbody tr:hover .empty-row {
 
 .legend-row.is-active,
 .legend-row:not(.is-zero):hover {
-    background: var(--bg);
+    background: var(--bg-sunken);
 }
 
 .legend-swatch {
-    width: 14px;
-    height: 14px;
-    border-radius: 5px;
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
 }
 
 .legend-name {
@@ -1399,16 +1361,18 @@ tbody tr:hover .empty-row {
 
 .legend-count {
     font-weight: 800;
+    font-variant-numeric: tabular-nums;
 }
 
 .legend-pct {
     color: var(--muted);
     text-align: right;
     font-size: 14px;
+    font-variant-numeric: tabular-nums;
 }
 
 .legend-row.is-zero {
-    color: var(--faint);
+    color: var(--muted);
 }
 
 .legend-row.is-zero .legend-swatch {
@@ -1860,7 +1824,8 @@ tbody tr.is-current:hover td {
 }
 
 .range-btn {
-    padding: 7px 14px;
+    min-height: 40px;
+    padding: 8px 16px;
     border: 1px solid var(--line-strong);
     border-radius: 999px;
     background: var(--card);
@@ -1872,6 +1837,11 @@ tbody tr.is-current:hover td {
 
 .range-btn:hover {
     border-color: var(--muted);
+}
+
+.range-btn:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
 }
 
 .range-btn[aria-pressed="true"] {
@@ -1930,7 +1900,7 @@ tbody tr.is-current:hover td {
 }
 
 .page-gap {
-    color: var(--faint);
+    color: var(--muted);
     padding: 0 4px;
 }
 
@@ -2447,10 +2417,6 @@ tbody tr.is-current:hover td {
 
 /* ---------------------------------------------------------------- smaller screens */
 @media (max-width: 1180px) {
-    .stat-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
     .dash-grid,
     .counter {
         grid-template-columns: 1fr;
@@ -2527,10 +2493,6 @@ tbody tr.is-current:hover td {
 }
 
 @media (max-width: 560px) {
-    .stat-grid {
-        grid-template-columns: 1fr;
-    }
-
     .queue-pill {
         padding: 8px 12px;
         font-size: 13px;
@@ -3362,6 +3324,7 @@ fieldset.field legend {
 .sign-space input[type="range"],
 .design-box input[type="range"] {
     width: 100%;
+    height: 32px;
     accent-color: var(--orange);
 }
 
@@ -3537,9 +3500,28 @@ fieldset.field legend {
 /* Filters on one row when the screen is wide enough; they wrap on narrow windows */
 .filters-row {
     display: grid;
-    grid-template-columns: 9.5rem 9.5rem minmax(0, 11rem) minmax(0, 7rem) minmax(0, 10rem) minmax(14rem, 1fr);
+    grid-template-columns: var(--filter-cols, 9.5rem 9.5rem minmax(0, 11rem) minmax(0, 7rem) minmax(0, 10rem) minmax(14rem, 1fr));
     gap: 12px;
     margin-bottom: 0;
+}
+
+/* The quick date ranges take their own line above the fields */
+.filters-row > .range-row {
+    grid-column: 1 / -1;
+}
+
+.filters-attendance {
+    --filter-cols: 9.5rem 9.5rem minmax(0, 9rem) minmax(0, 14rem) minmax(14rem, 1fr);
+}
+
+.filters-audit {
+    --filter-cols: 9.5rem 9.5rem minmax(0, 14rem) minmax(14rem, 1fr);
+}
+
+/* Long log text (a file path, say) wraps inside its column instead of pushing the table off screen */
+td.cell-long {
+    min-width: 18ch;
+    overflow-wrap: anywhere;
 }
 
 .filters-row .field,
@@ -3557,6 +3539,21 @@ fieldset.field legend {
 
 .btn-text:hover {
     background: var(--bg-sunken);
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    font-weight: 700;
+    color: var(--heading);
+    text-decoration: none;
+}
+
+.back-link:hover {
+    color: var(--orange-ink);
+    text-decoration: underline;
 }
 
 @media (max-width: 1100px) {

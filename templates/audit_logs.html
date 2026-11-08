@@ -8,13 +8,13 @@
 {# One encoded query string, shared by every pagination link #}
 {% set qs = {'date_from': date_from, 'date_to': date_to, 'category': category, 'q': search}|urlencode %}
 
-<section class="card">
+<section class="list-section" aria-labelledby="audit-title">
     <div class="section-head">
-        <h2>Staff Activity</h2>
+        <h2 id="audit-title">Staff activity</h2>
     </div>
 
     <!--FILTERS-->
-    <form id="filter-form" method="get" action="/audit_logs" class="filters">
+    <form id="filter-form" method="get" action="/audit_logs" class="filters filters-row filters-audit">
         <div class="field">
             <label for="date_from">From date</label>
             <input type="date" name="date_from" id="date_from" value="{{ date_from }}">
@@ -42,7 +42,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>Timestamp</th>
+                    <th>Date and time</th>
                     <th>Done by</th>
                     <th>Category</th>
                     <th>Action</th>
@@ -52,7 +52,8 @@
             <tbody>
                 {% for log in logs %}
                 <tr>
-                    <td><strong>{{ log.created_at.strftime('%m/%d/%Y %I:%M:%S %p') if log.created_at else '--' }}</strong></td>
+                    {# Date on the first line, time under it, so the column stays narrow and the description gets the room #}
+                    <td class="cell-num">{% if log.created_at %}<span class="cell-primary">{{ log.created_at.strftime('%m/%d/%Y') }}</span><span class="cell-sub">{{ log.created_at.strftime('%I:%M:%S %p') }}</span>{% else %}--{% endif %}</td>
                     {# Full name as it was that day, username under it. Older entries only have the username. #}
                     <td class="audit-who">{% if log.admin_full_name and log.admin_full_name != log.admin_username -%}
                         <span class="cell-primary">{{ log.admin_full_name }}</span>
@@ -62,7 +63,7 @@
                         {%- endif %}</td>
                     <td><span class="tag tag-regular">{{ log.category }}</span></td>
                     <td class="cell-primary">{{ log.action }}</td>
-                    <td>{{ log.description }}</td>
+                    <td class="cell-long">{{ log.description }}</td>
                 </tr>
                 {% else %}
                 <tr><td colspan="5" class="empty-row">No log entries match these filters.</td></tr>
