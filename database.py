@@ -46,6 +46,7 @@ class Ticket(Base):
     ticket_number = Column(String)
     status = Column(String, default="waiting", index=True)
     address = Column(String, nullable=True)
+    age = Column(Integer, nullable=True)     # whole years, typed at registration (v11); empty on older tickets
     
     service_id = Column(Integer, ForeignKey("services.id"))
     
@@ -68,6 +69,7 @@ class Visit(Base):
     ticket_number = Column(String)
     final_status = Column(String)
     address = Column(String, nullable=True)
+    age = Column(Integer, nullable=True)     # copied from the ticket (v11); empty on visits saved before it
     
     service_id = Column(Integer, ForeignKey("services.id"))
     
@@ -545,9 +547,17 @@ def _v10_issued_summary_index(con):
     con.execute("ANALYZE")
 
 
+def _v11_visitor_age(con):
+    """9 Nov 2026: the visitor's age is asked at Client Registration (both apps) and kept in the
+    logbook with the address. Visits saved before this have no age (left empty, never guessed).
+    Safe to rerun."""
+    _add_column(con, "tickets", "age", "INTEGER")
+    _add_column(con, "visits", "age", "INTEGER")
+
+
 MIGRATIONS = [_v1_counters_and_indexes, _v2_documents_settings_address, _v3_legacy_logo_flag, _v4_wording_options,
               _v5_pictures_and_design, _v6_spacing, _v7_sign_space, _v8_staff_roles, _v9_audit_full_name,
-              _v10_issued_summary_index]
+              _v10_issued_summary_index, _v11_visitor_age]
 LATEST = len(MIGRATIONS)
 
 def _has_table(db_file, name):

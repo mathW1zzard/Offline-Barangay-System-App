@@ -119,8 +119,7 @@ COPYRIGHT_YEAR = 2026
 templates.env.globals.update(app_title=APP_TITLE, app_version=APP_VERSION, app_owner=APP_OWNER,
                              support_email=SUPPORT_EMAIL, copyright_year=COPYRIGHT_YEAR,
                              sidebar_title=edition.SIDEBAR_TITLE, is_attendance=edition.IS_ATTENDANCE,
-                             has_documents=edition.HAS_DOCUMENTS, has_staff=edition.HAS_STAFF,
-                             asks_address=edition.ASKS_ADDRESS)
+                             has_documents=edition.HAS_DOCUMENTS, has_staff=edition.HAS_STAFF)
 
 # APPEARANCE: light / dark mode. Saved in a file next to the database, because the desktop window
 # starts in private mode on a new port each launch, so the browser itself cannot remember it.
@@ -350,7 +349,7 @@ def archive_stale_tickets() -> int:
         for t in stale:
             db.add(Visit(
                 citizen_name=t.citizen_name, lane=t.lane, ticket_number=t.ticket_number,
-                final_status="no_show", service_id=t.service_id, address=t.address,
+                final_status="no_show", service_id=t.service_id, address=t.address, age=t.age,
                 created_at=t.created_at,      # stays on the day it was registered
                 called_at=t.called_at,
                 completed_at=None,            # never served, so no time out ("--" on the pages)
@@ -1399,17 +1398,52 @@ def queue_snapshot() -> dict:
         "waiting_regular": waiting_regular
     }
 
+MAX_AGE = 120     # the highest age the registration form accepts
+NAME_MARKS = " .-'\u2019"   # besides letters, a name may have spaces, periods, hyphens and apostrophes (' or \u2019)
+
+
+def name_is_valid(name: str) -> bool:
+    """True if the visitor's name has at least one letter and nothing but letters (n with tilde and
+    accented letters included) and NAME_MARKS: "Ramon D. Garcia", "Ana Cruz-Reyes", "Maria O'Neil".
+    No numbers or other symbols. The registration page blocks them while typing; this is the check
+    that counts. Names already saved are not touched."""
+    has_letter = False
+    for ch in name:
+        kind = unicodedata.category(ch)
+        if kind.startswith("L"):
+            has_letter = True
+        elif not (kind.startswith("M") or ch in NAME_MARKS):    # M: an accent typed as a separate mark
+            return False
+    return has_letter
+
+
+def read_age(text: str):
+    """The age typed at registration as whole years (0 to MAX_AGE), or None if it is missing or not a
+    plain number. "07" and " 7 " are fine; "7.5", "-1" and "seven" are not."""
+    text = (text or "").strip()
+    if not text.isdigit() or len(text) > 3:
+        return None
+    age = int(text)
+    return age if age <= MAX_AGE else None
+
+
 @app.post("/register", dependencies=[Depends(require("register"))])
-def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = Form(""), service_id: str = Form(""), address: str = Form("")):
-    form = {"citizen_name": citizen_name, "lane": lane, "service_id": service_id, "address": address}
+def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = Form(""), service_id: str = Form(""),
+                    address: str = Form(""), age: str = Form("")):
+    form = {"citizen_name": citizen_name, "lane": lane, "service_id": service_id, "address": address, "age": age}
     name, sid = clean_text(citizen_name, 100), parse_optional_int(service_id)
-    # The Attendance edition does not ask for the address (it is used on certificates only), and
-    # ignores one if it is sent anyway, so it never stores what it has no use for.
-    addr = (clean_text(address, 150) or None) if edition.ASKS_ADDRESS else None
+    addr = clean_text(address, 150) or None
+    years = read_age(age)
     
     if not name:
         return render_registration(request, "Client name is required.", form, 400)
-    if edition.ASKS_ADDRESS and not addr:          # required since step 8e; still never printed on the queue slip
+    if not name_is_valid(name):
+        return render_registration(request, "The name can only have letters, spaces, and the marks . - ' "
+                                   "(no numbers or other symbols).", form, 400)
+    if years is None:                              # required since 9 Nov 2026, in both apps
+        return render_registration(request, f"Please enter the client's age in years (a number from 0 to {MAX_AGE}).",
+                                   form, 400)
+    if not addr:                                   # required since step 8e; still never printed on the queue slip
         return render_registration(request, "Please enter the client's address (Purok / Street).", form, 400)
     if lane not in ("P", "R"):
         return render_registration(request, "Please choose Priority or Regular.", form, 400)
@@ -1424,7 +1458,7 @@ def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = 
         ticket_number = issue_ticket_number(db, lane)          
         created_at = datetime.now()
         
-        ticket = Ticket(citizen_name=name, lane=lane, service_id=sid, address=addr,
+        ticket = Ticket(citizen_name=name, lane=lane, service_id=sid, address=addr, age=years,
                         ticket_number=ticket_number, created_at=created_at)
         
         
@@ -1600,6 +1634,7 @@ def finish_ticket(ticket_id: int, final_status: str, allowed_statuses: tuple):
         visit = Visit(
             citizen_name=ticket.citizen_name,
             address=ticket.address,
+            age=ticket.age,
             lane=ticket.lane,
             ticket_number=number,
             final_status=final_status,
@@ -1715,7 +1750,7 @@ def clear_queue(request: Request):
             counts[t.status] += 1
             db.add(Visit(
                 citizen_name=t.citizen_name, lane=t.lane, ticket_number=t.ticket_number,
-                final_status="no_show", service_id=t.service_id, address=t.address,
+                final_status="no_show", service_id=t.service_id, address=t.address, age=t.age,
                 created_at=t.created_at, called_at=t.called_at, completed_at=now,
             ))
             db.delete(t)
@@ -1895,12 +1930,12 @@ def sample_report() -> dict:
     from types import SimpleNamespace
     today = date.today()
     at = lambda hh, mm: datetime.combine(today, time(hh, mm))
-    rows = [SimpleNamespace(ticket_number=t, citizen_name=n, lane=l, service_label=sv, called_at=a, completed_at=b,
-                            final_status=st, address=None)
-            for t, n, l, sv, a, b, st in (
-                ("P-001", "Ana R. Cruz", "P", "Barangay Clearance", at(8, 5), at(8, 14), "completed"),
-                ("R-001", "Jose M. Reyes", "R", "Certificate of Residency", at(8, 16), at(8, 25), "completed"),
-                ("R-002", "Liza P. Ramos", "R", "Business Permit Inquiry", None, None, "no_show"),
+    rows = [SimpleNamespace(ticket_number=t, citizen_name=n, address=ad, age=ag, lane=l, service_label=sv, called_at=a,
+                            completed_at=b, final_status=st)
+            for t, n, ad, ag, l, sv, a, b, st in (
+                ("P-001", "Ana R. Cruz", "Purok 1", 67, "P", "Barangay Clearance", at(8, 5), at(8, 14), "completed"),
+                ("R-001", "Jose M. Reyes", "Purok 3", 34, "R", "Certificate of Residency", at(8, 16), at(8, 25), "completed"),
+                ("R-002", "Liza P. Ramos", "Purok 5", 25, "R", "Business Permit Inquiry", None, None, "no_show"),
             )]
     completed = sum(r.final_status == "completed" for r in rows)
     return {"stats": {"issued": len(rows), "completed": completed, "no_show": len(rows) - completed},
@@ -1929,16 +1964,15 @@ def attendance_export(request: Request, date_from: str = "", date_to: str = "", 
 
         buffer = io.StringIO()
         writer = csv.writer(buffer)
-        # The Attendance edition does not collect addresses, so its download has no Address column
-        address = [csv_safe] if edition.ASKS_ADDRESS else []
-        writer.writerow(["Date", "Ticket", "Client name"] + ["Address"] * len(address)
-                        + ["Type", "Service", "Time in", "Time out", "Status"])
+        writer.writerow(["Date", "Ticket", "Client name", "Address", "Age", "Type", "Service", "Time in", "Time out",
+                         "Status"])
         for v in rows:
             writer.writerow([
                 v.created_at.strftime("%m/%d/%Y"),
                 csv_safe(v.ticket_number),
                 csv_safe(v.citizen_name),
-                *[safe(v.address) for safe in address],
+                csv_safe(v.address),
+                "" if v.age is None else v.age,          # empty for visits saved before ages were asked
                 "Priority" if v.lane == "P" else "Regular",
                 csv_safe(v.service.service_name if v.service else "Removed service"),
                 v.called_at.strftime("%I:%M %p") if v.called_at else "",
@@ -3368,9 +3402,10 @@ def issue_form(request: Request, template_id: int, client_name: str = "", addres
             if queued.address:
                 carry.setdefault("address", queued.address)
             carry["ticket_number"], carry["ticket_date"] = queued.ticket_number, queued.created_at.date().isoformat()
+        queued_age = "" if queued is None or queued.age is None else str(queued.age)
 
         form = {"client_name": carry.get("client_name", ""), "address": carry.get("address", ""), "purpose": "",
-                "issue_date": date.today().isoformat(), "age": "", "civil_status": "",
+                "issue_date": date.today().isoformat(), "age": queued_age, "civil_status": "",
                 "nationality": documents.DEFAULT_NATIONALITY, "years": "",
                 # The CTC "Issued on" starts on today's date (step 8e); she clears it if the client has no CTC
                 "ctc_number": "", "ctc_place": "", "ctc_date": date.today().isoformat(),

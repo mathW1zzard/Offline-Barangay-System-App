@@ -14,7 +14,7 @@ This software helps the barangay office to:
   - manage the client queue, with priority and regular lanes;
   - keep the visitor logbook (attendance) and the records of services given.
 
-It stores personal information on the computer where it is installed, such as clients' names, the services they came for and the times they were served, and the actions of the administrator account.
+It stores personal information on the computer where it is installed, such as clients' names, addresses and ages, the services they came for and the times they were served, and the actions of the administrator account.
 
 The system works offline. It does not send any of this information over the internet, and the developer has no access to the barangay's records.
 

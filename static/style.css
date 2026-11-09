@@ -2593,6 +2593,50 @@ tbody tr.is-current:hover td {
     margin-top: -8px;
 }
 
+/* Client Registration: full name wide, age narrow (9 Nov 2026) */
+.form-row.form-row-age {
+    grid-template-columns: minmax(0, 1fr) 130px;
+}
+
+@media (max-width: 900px) {
+    .form-row.form-row-age {
+        grid-template-columns: minmax(0, 1fr) 110px;     /* the age box stays next to the name */
+    }
+}
+
+/* Reminder when a visitor aged 60 or more is put in the Regular lane */
+.senior-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 0;
+}
+
+.senior-note[hidden] {
+    display: none;
+}
+
+.senior-note svg {
+    flex: 0 0 auto;
+    margin-top: 2px;
+}
+
+.modal .senior-note {
+    margin-top: 16px;
+}
+
+/* "Numbers only" / "Letters only" under a box, for a few seconds after a character was left out */
+.blocked-note {
+    margin: 6px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--amber-ink);
+}
+
+.blocked-note[hidden] {
+    display: none;
+}
+
 .reg-card .lane-choice legend {
     margin-bottom: 8px;
 }

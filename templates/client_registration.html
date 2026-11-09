@@ -16,27 +16,36 @@
 
         {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
         <form action="/register" method="post" class="form" id="register-form" data-needs-confirm>
-            {#- The Attendance edition does not ask for the address: it is used on certificates only. -#}
-            <div{% if asks_address %} class="form-row"{% endif %}>
+            <div class="form-row form-row-age">
                 <div class="field">
                     <label for="citizen_name">Full name</label>
                     <input type="text" name="citizen_name" id="citizen_name"
                         value="{{ form.citizen_name if form else '' }}" autocomplete="off" maxlength="100" required
-                        autofocus>
+                        autofocus aria-describedby="name-blocked">
+                    {# Shown for a few seconds when a number or symbol was typed and left out #}
+                    <p class="hint blocked-note" id="name-blocked" aria-live="polite" hidden>Letters only (spaces and
+                        . - ' are fine). Numbers and symbols are left out.</p>
                 </div>
-                {% if asks_address %}
 
                 <div class="field">
-                    <label for="address">Address <span class="label-note">Purok / Street</span></label>
-                    <input type="text" name="address" id="address" value="{{ form.address if form else '' }}"
-                        maxlength="150" autocomplete="off" required aria-describedby="address-hint">
+                    {#- Plain text box with a number keypad: a number box changes the age when the mouse wheel
+                        scrolls over it. The server checks 0 to 120 again. -#}
+                    <label for="age">Age <span class="label-note">years</span></label>
+                    <input type="text" name="age" id="age" value="{{ form.age if form else '' }}" inputmode="numeric"
+                        pattern="[0-9]{1,3}" maxlength="3" autocomplete="off" required
+                        title="Whole years, from 0 to 120" aria-describedby="age-blocked address-hint">
+                    <p class="hint blocked-note" id="age-blocked" aria-live="polite" hidden>Numbers only.</p>
                 </div>
-                {% endif %}
             </div>
-            {% if asks_address %}
-            <p class="hint field-note" id="address-hint">The address is used on documents only. It is never printed on
-                the queue slip or shown on the display.</p>
-            {% endif %}
+
+            <div class="field">
+                <label for="address">Address <span class="label-note">Purok / Street</span></label>
+                <input type="text" name="address" id="address" value="{{ form.address if form else '' }}"
+                    maxlength="150" autocomplete="off" required aria-describedby="address-hint">
+            </div>
+            <p class="hint field-note" id="address-hint">The age and address are kept in the visitor
+                logbook{% if has_documents %} and filled in on certificates{% endif %}. They are never printed on the
+                queue slip or shown on the display.</p>
 
             <div class="field">
                 <label for="service_id">Service</label>
@@ -72,6 +81,11 @@
                     </label>
                 </div>
             </fieldset>
+            {# Shown by the script below when the age is 60 or more and Regular is picked. The secretary decides. #}
+            <p class="alert alert-warn senior-note" id="senior-note" role="status" hidden>
+                {{ icon('info', 18) }} <span>This visitor is 60 or older. Senior citizens use the
+                    <strong>Priority</strong> lane.</span>
+            </p>
 
             <button type="submit" class="btn btn-primary btn-block btn-lg" {% if not active_services %}disabled{% endif
                 %}>{{ icon('printer' if auto_print else 'plus', 20) }} {% if auto_print %}Generate and print ticket{% else %}Generate ticket{%
@@ -167,15 +181,17 @@
         <dl class="confirm-summary">
             <dt>Visitor</dt>
             <dd id="rc-name"></dd>
-            {% if asks_address %}
+            <dt>Age</dt>
+            <dd id="rc-age"></dd>
             <dt>Address</dt>
             <dd id="rc-address"></dd>
-            {% endif %}
             <dt>Service</dt>
             <dd id="rc-service"></dd>
             <dt>Lane</dt>
             <dd id="rc-lane"></dd>
         </dl>
+        <p class="alert alert-warn senior-note" id="rc-senior" hidden>{{ icon('info', 18) }} <span>60 or older but
+                Regular is picked. Choose <strong>Change details</strong> to switch to Priority.</span></p>
         <div class="modal-actions">
             <button type="button" class="btn btn-outline" data-close>Change details</button>
             <button type="button" class="btn btn-primary" id="register-confirm-btn" autofocus>
@@ -194,6 +210,57 @@
         const confirmBtn = document.getElementById('register-confirm-btn');
         if (!form || !dialog || !confirmBtn) return;
 
+        const SENIOR_AGE = 60;                            // senior citizens go in the Priority lane
+        const ageBox = form.elements['age'];
+        const seniorNote = document.getElementById('senior-note');
+
+        // A whole number from 0 to 120, or null
+        const ageValue = () => {
+            const text = ageBox.value.trim();
+            return /^\d{1,3}$/.test(text) && Number(text) <= 120 ? Number(text) : null;
+        };
+        const seniorOnRegular = () => {
+            const age = ageValue();
+            const lane = form.querySelector('input[name="lane"]:checked');
+            return age !== null && age >= SENIOR_AGE && !(lane && lane.value === 'P');
+        };
+
+        // Keep only the characters a box allows, as she types or pastes. Anything else is left out and
+        // a short note says why. The server checks again, so this is only a convenience.
+        const keepOnly = (box, notAllowed, note) => {
+            let timer = null;
+            box.addEventListener('input', (e) => {
+                if (e.isComposing) return;                // let an on-screen keyboard finish the letter
+                const cleaned = box.value.replace(notAllowed, '');
+                if (cleaned === box.value) return;
+                const caret = box.selectionStart - (box.value.length - cleaned.length);
+                box.value = cleaned;
+                box.setSelectionRange(Math.max(caret, 0), Math.max(caret, 0));
+                note.hidden = false;
+                clearTimeout(timer);
+                timer = setTimeout(() => { note.hidden = true; }, 4000);
+            });
+        };
+        // Name: letters (any language, with accents and ñ), spaces, . - ' and ’
+        keepOnly(form.elements['citizen_name'], /[^\p{L}\p{M} .'\u2019-]/gu, document.getElementById('name-blocked'));
+        keepOnly(ageBox, /\D/g, document.getElementById('age-blocked'));
+        // A name made only of marks (for example ".") is not a name
+        const nameBox = form.elements['citizen_name'];
+        nameBox.addEventListener('input', () => {
+            nameBox.setCustomValidity(nameBox.value.trim() && !/\p{L}/u.test(nameBox.value)
+                ? 'Type the name with letters.' : '');
+        });
+
+        // Reminder only: the lane is never changed for her
+        const updateSeniorNote = () => { seniorNote.hidden = !seniorOnRegular(); };
+        ageBox.addEventListener('input', () => {
+            ageBox.setCustomValidity(ageBox.value.trim() && ageValue() === null
+                ? 'Type the age in whole years, from 0 to 120.' : '');
+            updateSeniorNote();
+        });
+        form.querySelectorAll('input[name="lane"]').forEach((r) => r.addEventListener('change', updateSeniorNote));
+        updateSeniorNote();                               // a form shown again after an error
+
         // Every submit (button click or Enter key) lands here after the browser's own
         // "required" checks pass. We stop it, show the summary, and wait for confirmation.
         form.addEventListener('submit', (e) => {
@@ -204,9 +271,9 @@
             const lane = form.querySelector('input[name="lane"]:checked');
             // textContent, never innerHTML: the name is user input
             document.getElementById('rc-name').textContent = form.elements['citizen_name'].value.trim().replace(/\s+/g, ' ');
-            if (form.elements['address']) {     // not asked in the Attendance edition
-                document.getElementById('rc-address').textContent = form.elements['address'].value.trim().replace(/\s+/g, ' ') || 'Not given';
-            }
+            document.getElementById('rc-age').textContent = ageValue() + ' years old';
+            document.getElementById('rc-address').textContent = form.elements['address'].value.trim().replace(/\s+/g, ' ') || 'Not given';
+            document.getElementById('rc-senior').hidden = !seniorOnRegular();
             document.getElementById('rc-service').textContent = service.selectedIndex >= 0 ? service.options[service.selectedIndex].text : '';
             document.getElementById('rc-lane').textContent = lane && lane.value === 'P' ? 'Priority' : 'Regular';
             dialog.showModal();

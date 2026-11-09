@@ -57,7 +57,7 @@ search}|urlencode %}
         </div>
         <div class="field field-grow">
             <label for="search-client">Search</label>
-            <input type="search" name="q" id="search-client" placeholder="{{ 'Name, ticket number or address' if asks_address else 'Name or ticket number' }}"
+            <input type="search" name="q" id="search-client" placeholder="Name, ticket number or address"
                 value="{{ search }}" autocomplete="off">
         </div>
     </form>
@@ -81,8 +81,11 @@ search}|urlencode %}
                 <tr>
                     <td class="cell-num">{{ v.created_at.strftime('%m/%d/%Y') }}</td>
                     <td class="cell-primary cell-num">{{ v.ticket_number }}</td>
-                    <td><span class="cell-primary">{{ v.citizen_name }}</span>{% if v.address %}<span
-                            class="cell-sub">{{ v.address }}</span>{% endif %}</td>
+                    {#- Address and age under the name; visits saved before 9 Nov 2026 have no age -#}
+                    {% set sub = [v.address] if v.address else [] %}
+                    {% if v.age is not none %}{% set sub = sub + [v.age ~ ' years old'] %}{% endif %}
+                    <td><span class="cell-primary">{{ v.citizen_name }}</span>{% if sub %}<span
+                            class="cell-sub">{{ sub|join(' · ') }}</span>{% endif %}</td>
                     <td>{{ lane_tag(v.lane) }}</td>
                     <td>{{ v.service_label if v.service else 'Removed service' }}</td>
                     <td class="cell-num">{{ v.called_at.strftime('%I:%M %p') if v.called_at else '–' }}</td>

@@ -45,8 +45,6 @@ IS_ATTENDANCE = EDITION == ATTENDANCE
 # ---- what each app has
 HAS_DOCUMENTS = not IS_ATTENDANCE       # certificates, issued documents, templates and designs
 HAS_STAFF = not IS_ATTENDANCE           # staff accounts, roles, Switch user, first login with a temporary password
-ASKS_ADDRESS = not IS_ATTENDANCE        # the address is used on certificates only, so the Attendance edition
-                                        # does not collect it (Data Privacy Act: collect only what is used)
 
 # Permissions (permissions.py) that belong to Documents. In the Attendance edition nobody has them, so
 # every Documents button, link and sidebar item disappears without changing each page.

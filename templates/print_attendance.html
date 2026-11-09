@@ -314,7 +314,8 @@
                     <th>No.</th>
                     <th>Ticket#</th>
                     <th>Client Name</th>
-                    {% if asks_address %}<th>Address</th>{% endif %}
+                    <th>Address</th>
+                    <th>Age</th>
                     <th>Type</th>
                     <th>Service</th>
                     <th>Time In</th>
@@ -328,7 +329,8 @@
                     <td class="muted">{{ loop.index }}</td>
                     <td><strong>{{ v.ticket_number }}</strong></td>
                     <td><strong>{{ v.citizen_name }}</strong></td>
-                    {% if asks_address %}<td class="addr">{{ v.address or '--' }}</td>{% endif %}
+                    <td class="addr">{{ v.address or '--' }}</td>
+                    <td class="muted">{{ '--' if v.age is none else v.age }}</td>
                     <td class="muted">{% if v.lane == "P" %}Priority{% else %}Regular{% endif %}</td>
                     <td class="muted">{{ v.service_label }}</td>
                     <td class="muted nowrap">{{ v.called_at.strftime('%I:%M %p') if v.called_at else '--' }}</td>
@@ -339,7 +341,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="{{ 9 if asks_address else 8 }}" class="empty">No records match these filters.</td>
+                    <td colspan="10" class="empty">No records match these filters.</td>
                 </tr>
                 {% endfor %}
             </tbody>

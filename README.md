@@ -56,7 +56,7 @@ This system replaces that with:
 
 **Records**
 - Attendance history with date range, client type, service and name, ticket or address search
-- Print view (with each client's address) and CSV export
+- Print view (with each client's address and age) and CSV export
 - Dashboard with today's totals and service volume
 
 **Setup and administration**
@@ -74,7 +74,7 @@ This system replaces that with:
 
 ## How it works
 
-1. **Register.** The secretary enters the visitor's name, address, service and lane. A ticket is issued and a slip is printed (the slip never shows the address).
+1. **Register.** The secretary enters the visitor's name, age, address, service and lane (a reminder appears if someone aged 60 or older is put in the Regular lane). A ticket is issued and a slip is printed (the slip never shows the age or address).
 2. **Call.** Pressing *Call next* announces the ticket number aloud and shows it on the display screen.
 3. **Serve.** If the visitor's service is linked to a certificate, its *Prepare* button opens the issue form with their name already filled in; the certificate is printed with the next control number.
 4. **Finish.** The secretary marks the visit *complete*, or *skip* if the visitor stepped away, or *no-show* if they never came. Skipped visitors can be recalled.
@@ -127,7 +127,7 @@ Keep `APP_VERSION` in `main.py` and `MyAppVersion` in `installer.iss` the same.
 
 ### The Attendance edition
 
-The same code also builds a second, smaller app: the **Barangay Queuing and Attendance Management System**, for an office run by one person. It has the queue, the display, attendance, the audit log, Settings, the setup wizard and backups, but no Documents and no Staff accounts, and it does not ask for the visitor's address. Its About page credits Soft-Tech Builders.
+The same code also builds a second, smaller app: the **Barangay Queuing and Attendance Management System**, for an office run by one person. It has the queue, the display, attendance, the audit log, Settings, the setup wizard and backups, but no Documents and no Staff accounts. Its About page credits Soft-Tech Builders.
 
 `edition.py` decides which app is running. The Attendance edition has its own name, program folder, data folder (`%LOCALAPPDATA%\Barangay_Attendance_Edition`) and installer ID, so both apps can be installed on the same PC without touching each other's records.
 
