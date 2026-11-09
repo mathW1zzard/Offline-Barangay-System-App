@@ -57,7 +57,7 @@ search}|urlencode %}
         </div>
         <div class="field field-grow">
             <label for="search-client">Search</label>
-            <input type="search" name="q" id="search-client" placeholder="Name, ticket number or address"
+            <input type="search" name="q" id="search-client" placeholder="{{ 'Name, ticket number or address' if asks_address else 'Name or ticket number' }}"
                 value="{{ search }}" autocomplete="off">
         </div>
     </form>

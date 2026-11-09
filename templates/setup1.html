@@ -5,7 +5,7 @@
 {% block eyebrow %}<p class="step-indicator">First-time setup &middot; Step 1 of 2</p>{% endblock %}
 {% block heading %}Create your account{% endblock %}
 {% block description %}1st step to create a new account{% endblock %}
-{% block intro %}<p class="auth-intro">This will be the Administrator account. You can add accounts for other staff later, under Staff accounts. Choose a username and password you'll remember.</p>{% endblock %}
+{% block intro %}<p class="auth-intro">This will be the Administrator account.{% if has_staff %} You can add accounts for other staff later, under Staff accounts.{% else %} It is the only account, so keep the password private.{% endif %} Choose a username and password you'll remember.</p>{% endblock %}
 {% block body %}
         <form action="/setup" method="post" class="form">
             <div class="field">

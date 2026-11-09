@@ -125,6 +125,17 @@ For development without a printer, set the environment variable `BQS_DUMMY_PRINT
 
 Keep `APP_VERSION` in `main.py` and `MyAppVersion` in `installer.iss` the same.
 
+### The Attendance edition
+
+The same code also builds a second, smaller app: the **Barangay Queuing and Attendance Management System**, for an office run by one person. It has the queue, the display, attendance, the audit log, Settings, the setup wizard and backups, but no Documents and no Staff accounts, and it does not ask for the visitor's address. Its About page credits Soft-Tech Builders.
+
+`edition.py` decides which app is running. The Attendance edition has its own name, program folder, data folder (`%LOCALAPPDATA%\Barangay_Attendance_Edition`) and installer ID, so both apps can be installed on the same PC without touching each other's records.
+
+- **Run from source:** `set BQS_EDITION=attendance` before `python run_app.py`. Its development data is kept in `attendance_dev_data\`, never in the project folder's database.
+- **Build:** run `build_attendance.bat` (it builds into `dist_attendance\`, so it never deletes the Barangay System build), then open `installer_attendance.iss` in Inno Setup and press **Compile**. The installer is written to `installer_output\Barangay_Attendance_Setup.exe`.
+
+Keep `MyAppVersion` in `installer_attendance.iss` the same as `APP_VERSION` too.
+
 ## Built with
 
 | Area | Technology |
@@ -162,11 +173,13 @@ doc_templates.py   built-in wordings, fields and wording marks
 docx_design.py     reads the design of a Word (.docx) certificate
 pictures.py        checks and stores logos and design pictures
 paths.py           where bundled files and the data folder are
+edition.py         which app this is: the Barangay System or the Attendance edition
 app_logging.py     the log file
 run_app.py         desktop launcher (main window and display screen)
 make_notices.py    open-source license list (run by build.bat)
 templates/         pages           static/    CSS, JavaScript, fonts, audio clips
 build.bat          app build       installer.iss   Windows installer script
+build_attendance.bat, Barangay_Attendance.spec, installer_attendance.iss   the same for the Attendance edition
 ```
 
 ## Developer

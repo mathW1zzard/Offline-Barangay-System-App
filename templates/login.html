@@ -2,7 +2,7 @@
 {% from "_macros.html" import icon %}
 {% block title %}Sign in{% endblock %}
 {% block badge %}{{ icon('lock', 26) }}{% endblock %}
-{% block eyebrow %}<p class="auth-eyebrow">Staff sign-in</p>{% endblock %}
+{% block eyebrow %}<p class="auth-eyebrow">{{ 'Staff sign-in' if has_staff else 'Sign in' }}</p>{% endblock %}
 {% block heading %}{{ app_title }}{% endblock %}
 {% block description %}To login the application{% endblock %}
 {% block body %}

@@ -4,12 +4,16 @@ __pycache__/
 
 # Build output (make_notices.py writes the two license files on every build)
 THIRD_PARTY_NOTICES.txt
+THIRD_PARTY_NOTICES_Attendance.txt
 third_party_licenses.json
 build/
 dist/
+build_attendance/
+dist_attendance/
 installer_output/
 
-# Runtime database files
+# Runtime database files (the Attendance edition's development data has its own folder)
+attendance_dev_data/
 *.db
 *.db-*
 *.bak

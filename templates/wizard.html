@@ -17,7 +17,7 @@
                 <p class="step-indicator">{% if step == 'finish' %}Barangay setup &middot; All done{% else %}Barangay
                     setup &middot; Step {{ step_number }} of 3{% endif %}</p>
                 <h1>{% if step == 'profile' %}Tell us about your barangay{% elif step == 'logos' %}Add your logos{% elif
-                    step == 'signatories' %}Who signs the documents?{% else %}You are all set{% endif %}</h1>
+                    step == 'signatories' %}Who signs the {{ 'reports' if is_attendance else 'documents' }}?{% else %}You are all set{% endif %}</h1>
             </div>
             <form action="/logout" method="post"><button type="submit" class="btn btn-sm btn-outline">{{ icon('log-out',
                     16) }} Sign out</button></form>
@@ -40,8 +40,8 @@
 
                 {% if step == 'profile' %}
                 <!--STEP 1: PROFILE-->
-                <p class="hint">This is printed at the top of every certificate and report, and on the queue slip. You
-                    can change it later in Settings.</p>
+                <p class="hint">This is printed at the top of every {{ 'attendance report' if is_attendance else
+                    'certificate and report' }}, and on the queue slip. You can change it later in Settings.</p>
                 <form action="/wizard/profile" method="post" class="form" id="form-profile">
                     <div class="field">
                         <label for="barangay_name">Name of your barangay</label>
@@ -74,7 +74,7 @@
                     </div>
                 </form>
                 <p class="hint">Type the name the way it should print, for example "Barangay 4" or "Barangay Poblacion".
-                    Documents use it exactly as typed.</p>
+                    {{ 'Printouts' if is_attendance else 'Documents' }} use it exactly as typed.</p>
                 {% elif step == 'logos' %}
                 <!--STEP 2: LOGOS-->
                 <p class="hint">Choose a picture for each logo you have, and see it in the preview. PNG or JPG, up to 2
@@ -112,8 +112,9 @@
 
                 {% elif step == 'signatories' %}
                 <!--STEP 3: SIGNATORIES-->
-                <p class="hint">Their names and titles are printed on the signature lines. Officials change after
-                    elections, so you can update them any time in Settings.</p>
+                <p class="hint">Their names and titles are printed on the signature lines{% if is_attendance %} of the
+                    attendance report: the Secretary under "Prepared by" and the Captain under "Noted by"{% endif %}.
+                    Officials change after elections, so you can update them any time in Settings.</p>
                 <form action="/wizard/signatories" method="post" class="form" id="form-signatories">
                     <div class="form-row">
                         <div class="field">
@@ -151,7 +152,7 @@
 
                 {% else %}
                 <!--FINISH-->
-                <p class="hint">This is how the top of your documents will look.</p>
+                <p class="hint">This is how the top of your {{ 'reports' if is_attendance else 'documents' }} will look.</p>
                 <div class="paper-preview">{{ doc_header(branding) }}</div>
                 {% if skipped %}
                 <div class="alert alert-warn" role="status">Still to do: {{ skipped|join(', ') }}. You can add {{ 'it'
@@ -159,12 +160,12 @@
                 </div>
                 {% endif %}
                 <p class="hint">Print a test page to check the header, your logos and the paper size. The test page is
-                    not saved and uses no control number.
+                    not saved{{ ' and lists made-up visitors only' if is_attendance else ' and uses no control number' }}.
                     Next, check the receipt printer under Maintenance, and the list of services under Services.</p>
                 <div class="wizard-actions">
                     <a href="/wizard/signatories" class="btn btn-outline btn-lg">Back</a>
                     <a href="/wizard/test-document" class="btn btn-outline btn-lg">{{ icon('printer', 20) }} Print a
-                        test document</a>
+                        test {{ 'report' if is_attendance else 'document' }}</a>
                     <form action="/wizard/finish" method="post"><button type="submit"
                             class="btn btn-primary btn-lg">Finish setup</button></form>
                 </div>

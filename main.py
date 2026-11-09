@@ -11,6 +11,7 @@ setup_logging()
 from database import SessionLocal, Ticket, Service, Visit, Admin, AdminLog, Role, engine, DocumentTemplate, IssuedDocument
 from database import LATEST as DB_LATEST, close_database   # close_database: called by run_app.py at exit
 from paths import resource_path, data_path, DATA_DIR
+import edition          # full Barangay System or the Attendance edition (see edition.py)
 import branding
 import permissions as perms
 import doc_templates
@@ -87,6 +88,14 @@ app.add_middleware(SessionMiddleware,
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
 
 @app.middleware("http")
+async def block_other_edition_pages(request: Request, call_next):
+    """Attendance edition: the Documents and Staff accounts addresses do not exist, so typing or
+    bookmarking one goes back to the start page (there is nothing to explain to the secretary)."""
+    if edition.is_blocked(request.url.path):
+        return RedirectResponse(url="/dashboard", status_code=303)
+    return await call_next(request)
+
+@app.middleware("http")
 async def block_cross_origin_posts(request: Request, call_next):
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         origin = request.headers.get("origin")
@@ -101,14 +110,17 @@ def branding_context(request: Request) -> dict:
 
 templates = Jinja2Templates(directory=resource_path("templates"), context_processors=[branding_context])
 
-APP_TITLE = "Barangay System"                 # the name people see; change it here only
-APP_VERSION = "2.0.0"                         # keep the same as MyAppVersion in installer.iss
+APP_TITLE = edition.APP_TITLE                 # the name people see; each edition's is set in edition.py
+APP_VERSION = "2.0.0"                         # keep the same as MyAppVersion in installer.iss and installer_attendance.iss
 APP_RELEASED = "November 2026"               # when this version came out (About page)
-APP_OWNER = "Jo-Tech-Developer"               # shown in every footer and on the About page
-SUPPORT_EMAIL = "jotechdeveloper@gmail.com"   # where barangays send questions and problem reports
+APP_OWNER = edition.APP_OWNER                 # shown in every footer and on the About page
+SUPPORT_EMAIL = edition.SUPPORT_EMAIL         # where barangays send questions and problem reports
 COPYRIGHT_YEAR = 2026
 templates.env.globals.update(app_title=APP_TITLE, app_version=APP_VERSION, app_owner=APP_OWNER,
-                             support_email=SUPPORT_EMAIL, copyright_year=COPYRIGHT_YEAR)
+                             support_email=SUPPORT_EMAIL, copyright_year=COPYRIGHT_YEAR,
+                             sidebar_title=edition.SIDEBAR_TITLE, is_attendance=edition.IS_ATTENDANCE,
+                             has_documents=edition.HAS_DOCUMENTS, has_staff=edition.HAS_STAFF,
+                             asks_address=edition.ASKS_ADDRESS)
 
 # APPEARANCE: light / dark mode. Saved in a file next to the database, because the desktop window
 # starts in private mode on a new port each launch, so the browser itself cannot remember it.
@@ -175,7 +187,11 @@ def current_priority_streak(db) -> int:
 THROTTLE_MAX_FAILURES, THROTTLE_WINDOW_SECONDS = 5, 60
 
 # ADMIN LOGS
-LOG_CATEGORIES = ["Queue", "Service", "Settings", "Security", "Database", "Documents", "Staff"]
+LOG_CATEGORIES = ["Queue", "Service", "Settings", "Security", "Database"]
+if edition.HAS_DOCUMENTS:
+    LOG_CATEGORIES.append("Documents")
+if edition.HAS_STAFF:
+    LOG_CATEGORIES.append("Staff")
 NOT_SIGNED_IN = "(not signed in)" # who gets blamed for failed logins
 # Names the audit log uses for things nobody signed in did. No account may have them, or a person's
 # actions would look like the app's own (checked ignoring capital letters).
@@ -1103,10 +1119,10 @@ async def not_allowed_handler(request: Request, exc: NotAllowed):
 def can(request: Request, key: str) -> bool:
     """True if the person signed in may do `key` (a key from permissions.py). Used by templates too."""
     user = getattr(request.state, "user", None)
-    if not user:
+    if not user or key in edition.HIDDEN_PERMISSIONS:    # Attendance edition: nobody has the Documents keys
         return False
     if key == perms.ADMIN_ONLY:
-        return user.is_admin
+        return user.is_admin and edition.HAS_STAFF       # Staff accounts and Roles
     return user.is_admin or key in user.perms
 
 
@@ -1387,11 +1403,13 @@ def queue_snapshot() -> dict:
 def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = Form(""), service_id: str = Form(""), address: str = Form("")):
     form = {"citizen_name": citizen_name, "lane": lane, "service_id": service_id, "address": address}
     name, sid = clean_text(citizen_name, 100), parse_optional_int(service_id)
-    addr = clean_text(address, 150) or None
+    # The Attendance edition does not ask for the address (it is used on certificates only), and
+    # ignores one if it is sent anyway, so it never stores what it has no use for.
+    addr = (clean_text(address, 150) or None) if edition.ASKS_ADDRESS else None
     
     if not name:
         return render_registration(request, "Client name is required.", form, 400)
-    if not addr:                                   # required since step 8e; still never printed on the queue slip
+    if edition.ASKS_ADDRESS and not addr:          # required since step 8e; still never printed on the queue slip
         return render_registration(request, "Please enter the client's address (Purok / Street).", form, 400)
     if lane not in ("P", "R"):
         return render_registration(request, "Please choose Priority or Regular.", form, 400)
@@ -1851,18 +1869,43 @@ def attendance_print(request: Request, date_from: str = "", date_to: str = "", l
             parts.append(f'Search: "{q}"')
             
         log_action_throttled(request, "Database", "Attendance Printed", f"Opened the attendance print view ({', '.join(parts)})")
-        return templates.TemplateResponse(request,"print_attendance.html", {
-            
+        return attendance_report_page(request, {
             "stats": stats,
             "rows": rows,
-            "total_rows": len(rows),
             "filters_text": ", ".join(parts),
             "range_text": range_label(d_from, d_to),
-            "generated_at": datetime.now().strftime("%m/%d/%Y %I:%M %p"),
-        },
-    )
+        })
     finally:
         db.close()
+
+
+def attendance_report_page(request: Request, report: dict, test: bool = False):
+    """The printable attendance report. test=True: the made-up sample the first-run wizard prints
+    (Attendance edition), with a "Back to setup" button instead of "Return to Attendance"."""
+    return templates.TemplateResponse(request, "print_attendance.html", {
+        **report,
+        "total_rows": len(report["rows"]),
+        "generated_at": datetime.now().strftime("%m/%d/%Y %I:%M %p"),
+        "test": test,
+    })
+
+
+def sample_report() -> dict:
+    """A test attendance report with made-up visitors: nothing is read from or saved to the records."""
+    from types import SimpleNamespace
+    today = date.today()
+    at = lambda hh, mm: datetime.combine(today, time(hh, mm))
+    rows = [SimpleNamespace(ticket_number=t, citizen_name=n, lane=l, service_label=sv, called_at=a, completed_at=b,
+                            final_status=st, address=None)
+            for t, n, l, sv, a, b, st in (
+                ("P-001", "Ana R. Cruz", "P", "Barangay Clearance", at(8, 5), at(8, 14), "completed"),
+                ("R-001", "Jose M. Reyes", "R", "Certificate of Residency", at(8, 16), at(8, 25), "completed"),
+                ("R-002", "Liza P. Ramos", "R", "Business Permit Inquiry", None, None, "no_show"),
+            )]
+    completed = sum(r.final_status == "completed" for r in rows)
+    return {"stats": {"issued": len(rows), "completed": completed, "no_show": len(rows) - completed},
+            "rows": rows, "filters_text": "Test report with made-up visitors (nothing is saved)",
+            "range_text": f"{today:%b %d, %Y}"}
         
 _CSV_DANGEROUS = ("=", "+", "-", "@", "\t", "\r")
 def csv_safe(value) -> str:
@@ -1886,13 +1929,16 @@ def attendance_export(request: Request, date_from: str = "", date_to: str = "", 
 
         buffer = io.StringIO()
         writer = csv.writer(buffer)
-        writer.writerow(["Date", "Ticket", "Client name", "Address", "Type", "Service", "Time in", "Time out", "Status"])
+        # The Attendance edition does not collect addresses, so its download has no Address column
+        address = [csv_safe] if edition.ASKS_ADDRESS else []
+        writer.writerow(["Date", "Ticket", "Client name"] + ["Address"] * len(address)
+                        + ["Type", "Service", "Time in", "Time out", "Status"])
         for v in rows:
             writer.writerow([
                 v.created_at.strftime("%m/%d/%Y"),
                 csv_safe(v.ticket_number),
                 csv_safe(v.citizen_name),
-                csv_safe(v.address),
+                *[safe(v.address) for safe in address],
                 "Priority" if v.lane == "P" else "Regular",
                 csv_safe(v.service.service_name if v.service else "Removed service"),
                 v.called_at.strftime("%I:%M %p") if v.called_at else "",
@@ -1965,6 +2011,8 @@ def add_services(request: Request, service_name: str = Form(...), service_status
     with SessionLocal() as db:
         error = service_name_error(db, name)
         template_id, doc_error = read_document_choice(db, document_template_id)
+        if not edition.HAS_DOCUMENTS:      # Attendance edition: services are never linked to a document
+            template_id, doc_error = None, None
         if error or doc_error:
             flash(request, False, error or doc_error)
             return RedirectResponse(url="/services", status_code=303)
@@ -1983,6 +2031,8 @@ def edit_service(request: Request, service_id: int, service_name: str = Form(...
         service = db.get(Service, service_id)
         error = service_name_error(db, name, exclude_id=service_id)
         template_id, doc_error = read_document_choice(db, document_template_id)
+        if not edition.HAS_DOCUMENTS:      # Attendance edition: no document box on the form, so keep what is saved
+            template_id, doc_error = (service.document_template_id if service else None), None
 
         if error or doc_error:
             flash(request, False, error or doc_error)
@@ -2747,7 +2797,9 @@ def wizard_start():
 
 @app.get("/wizard/test-document", dependencies=[Depends(wizard_login)])
 def wizard_test_document(request: Request):
-        return templates.TemplateResponse(request, "test_document.html", {})
+    if edition.IS_ATTENDANCE:                      # no certificates: the test page is a sample attendance report
+        return attendance_report_page(request, sample_report(), test=True)
+    return templates.TemplateResponse(request, "test_document.html", {})
 
 @app.get("/wizard/{step}", dependencies=[Depends(wizard_login)])
 def show_wizard_step(request: Request, step: str):
@@ -3647,7 +3699,7 @@ def add_or_number(request: Request, doc_id: int, or_number: str = Form(""), back
 
 
 # ABOUT
-TERMS_FILE = Path(resource_path("terms_and_conditions.txt"))         # the same terms the installer shows
+TERMS_FILE = Path(resource_path(edition.TERMS_FILE))                 # the same terms the installer shows
 LICENSES_FILE = Path(resource_path("third_party_licenses.json"))     # made by make_notices.py (build.bat)
 
 def newest_backup(folder: Path):
@@ -3717,7 +3769,8 @@ def bundled_licenses() -> list[dict]:
 
 @app.get("/about", dependencies=[Depends(login_required)])
 def show_about(request: Request):
-    return templates.TemplateResponse(request, "about.html", {
+    page = "about_attendance.html" if edition.IS_ATTENDANCE else "about.html"
+    return templates.TemplateResponse(request, page, {
         "released": APP_RELEASED,
         "details": system_details(),
         "terms": terms_text(),

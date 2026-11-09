@@ -20,7 +20,7 @@
             <div class="brand">
                 <div class="brand-icon">{{ icon('app-icon', 24) }}</div>
                 <div class="brand-text">
-                    <h2>{{ app_title }}</h2>
+                    <h2>{{ sidebar_title }}</h2>
                     <p>{{ barangay_name }}</p>
                 </div>
             </div>
@@ -139,11 +139,14 @@
                             </div>
                             {% endif %}
                             <a href="/change-password" role="menuitem">{{ icon('key', 18) }} Change password</a>
-                            {# Shared PC: no "are you sure?" step, so handing over the desk is quick #}
+                            {# Shared PC: no "are you sure?" step, so handing over the desk is quick.
+                               The Attendance edition has one account, so there is nobody to switch to. #}
+                            {% if has_staff %}
                             <form method="post" action="/logout">
                                 <input type="hidden" name="reason" value="switch">
                                 <button type="submit" role="menuitem">{{ icon('users', 18) }} Switch user</button>
                             </form>
+                            {% endif %}
                             <button type="button" role="menuitem" data-confirm data-action="/logout"
                                 data-title="Log out of your account?"
                                 data-message="You will be signed out and will need to enter your username and password again to use the system."

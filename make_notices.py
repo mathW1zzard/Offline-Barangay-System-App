@@ -5,6 +5,8 @@ build.bat runs it before PyInstaller, so the list always matches the versions th
   third_party_licenses.json   name, version and license of each part (read by the About page)
 
 Run it by hand with:  python make_notices.py
+For the Attendance edition (build_attendance.bat does this): set BQS_EDITION=attendance first. Its
+notices go to THIRD_PARTY_NOTICES_Attendance.txt, so building one app never changes the other's file.
 """
 import json
 import re
@@ -13,7 +15,11 @@ from importlib import metadata
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-APP_TITLE = "Barangay System"
+sys.path.insert(0, str(HERE))
+import edition                          # noqa: E402  (which app is being built: see edition.py)
+
+APP_TITLE = edition.APP_TITLE
+NOTICES_FILE = edition.NOTICES_FILE     # THIRD_PARTY_NOTICES.txt, or THIRD_PARTY_NOTICES_Attendance.txt
 
 # Tools used only to build or develop the app. They are never inside the installed app.
 NOT_SHIPPED = {"pip", "wheel", "pyinstaller", "pyinstaller-hooks-contrib", "altgraph", "pefile",
@@ -102,12 +108,12 @@ def main():
         title = f"{r['name']} {r['version']}".strip()
         lines += ["=" * 78, f"{title}  -  {r['license']}", "=" * 78, ""]
         lines += ["\n\n".join(r["texts"]) if r["texts"] else "(No license file was found in this package.)", ""]
-    (HERE / "THIRD_PARTY_NOTICES.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\r\n")
+    (HERE / NOTICES_FILE).write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\r\n")
 
     short = [{"name": r["name"], "version": r["version"], "license": r["license"]} for r in rows]
     (HERE / "third_party_licenses.json").write_text(json.dumps(short, indent=1), encoding="utf-8")
 
-    print(f"Listed {len(rows)} open-source parts in THIRD_PARTY_NOTICES.txt and third_party_licenses.json")
+    print(f"Listed {len(rows)} open-source parts in {NOTICES_FILE} and third_party_licenses.json")
     if missing:
         print("No license file found for: " + ", ".join(missing) + " (check these by hand)")
 

@@ -1,0 +1,548 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{#- The About page of the Attendance edition (main.py picks it when edition.IS_ATTENDANCE). The team,
+    contact and acknowledgements come from the Barangay Queuing and Attendance Management System
+    (version 1.0.1), in the layout of the Barangay System's About page. -#}
+{% block title %}About{% endblock %}
+{% block page_title %}About{% endblock %}
+{% block description %}About {{ app_title }}{% endblock %}
+{% block page_subtitle %}Version, help and support{% endblock %}
+
+{% block head %}
+<style>
+    /* ---- About page ---- */
+    .about-name {
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--text);
+        margin-bottom: 10px;
+    }
+
+    .about-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 14px;
+    }
+
+    .about-desc,
+    .about-list,
+    .help-list {
+        font-size: 16px;
+        line-height: 1.6;
+        max-width: 75ch;
+    }
+
+    .about-desc {
+        color: var(--muted);
+        margin-top: 16px;
+    }
+
+    .about-list {
+        margin: 12px 0 0;
+        padding-left: 22px;
+        display: grid;
+        gap: 6px;
+    }
+
+    /* ---- System information ---- */
+    .sys-list {
+        margin: 16px 0 0;
+        display: grid;
+        border-top: 1px solid var(--line);
+    }
+
+    .sys-list > div {
+        display: grid;
+        grid-template-columns: minmax(150px, 220px) 1fr;
+        gap: 4px 16px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+    }
+
+    .sys-list dt {
+        font-weight: 700;
+        color: var(--text);
+    }
+
+    .sys-list dd {
+        margin: 0;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+        user-select: text;
+    }
+
+    .sys-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 16px;
+        margin-top: 16px;
+    }
+
+    @media (max-width: 560px) {
+        .sys-list > div {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* ---- Quick help ---- */
+    .help-sub {
+        margin: 22px 0 8px;
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--text);
+    }
+
+    .help-list {
+        display: grid;
+        gap: 8px;
+    }
+
+    .help-list details {
+        border: 1px solid var(--line);
+        border-radius: var(--radius-btn);
+        padding: 12px 16px;
+    }
+
+    .help-list summary,
+    .about-fold > summary {
+        cursor: pointer;
+        font-weight: 700;
+        color: var(--text);
+    }
+
+    .help-list details p {
+        margin: 8px 0 0;
+        color: var(--muted);
+    }
+
+    kbd {
+        display: inline-block;
+        padding: 1px 7px;
+        border: 1px solid var(--line);
+        border-bottom-width: 2px;
+        border-radius: 6px;
+        background: var(--bg-sunken);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text);
+        white-space: nowrap;
+    }
+
+    .about-link:hover {
+        text-decoration: underline;
+    }
+
+    .about-link {
+        color: var(--blue-ink);
+        font-weight: 700;
+    }
+
+    /* ---- Terms and licenses (folded) ---- */
+    .about-fold > summary {
+        font-size: 18px;
+        font-weight: 800;
+    }
+
+    .about-fold[open] > summary {
+        margin-bottom: 12px;
+    }
+
+    .about-terms {
+        max-height: 420px;
+        overflow: auto;
+        margin: 0;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-btn);
+        background: var(--bg-sunken);
+        font-family: inherit;
+        font-size: 14px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        color: var(--text);
+    }
+
+    /* ---- Developers: one card per team member ---- */
+    .team-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 20px;
+        margin-top: 8px;
+    }
+
+    .team-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 6px;
+        padding: 28px 20px 20px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--card);
+    }
+
+    .team-avatar {
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        background: var(--avatar-bg);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 24px;
+        font-weight: 800;
+        letter-spacing: .04em;
+        box-shadow: 0 0 0 6px var(--orange-soft);
+        margin-bottom: 10px;
+    }
+
+    .team-name {
+        font-size: 18px;
+        font-weight: 800;
+        color: var(--text);
+        line-height: 1.3;
+    }
+
+    .team-role {
+        padding: 5px 12px;
+        border-radius: 14px;
+        background: var(--orange-soft);
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.4;
+    }
+
+    .team-org {
+        font-size: 14px;
+        color: var(--muted);
+        margin: 2px 0 12px;
+    }
+
+    .team-email {
+        margin-top: auto;              /* every card's email lines up at the bottom */
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--blue-ink);
+        font-size: 14px;
+        font-weight: 700;
+        text-decoration: none;
+        overflow-wrap: anywhere;
+    }
+
+    .team-email:hover {
+        text-decoration: underline;
+    }
+
+    /* ---- Contact and acknowledgements ---- */
+    .contact-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        margin-top: 14px;
+        font-size: 16px;
+    }
+
+    .contact-row .label {
+        min-width: 72px;
+        font-weight: 700;
+        color: var(--text);
+    }
+
+    .ack-list {
+        list-style: none;
+        margin: 12px 0 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 10px 24px;
+        font-size: 16px;
+    }
+
+    .ack-list li {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+    }
+
+    .ack-name {
+        display: block;
+        font-weight: 700;
+        color: var(--text);
+    }
+
+    .ack-role {
+        color: var(--muted);
+        font-size: 14px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- 1. THE APP -->
+<section class="card">
+    <h2 class="card-title">{{ icon('info', 22) }} About the System</h2>
+    <h3 class="about-name">{{ app_title }}</h3>
+    <div class="about-meta">
+        <span class="count-pill">Version {{ app_version }}</span>
+        <span class="hint">Released {{ released }}</span>
+        <span class="hint">&middot; Installed for {{ barangay_name }}</span>
+    </div>
+    <p class="about-desc">An offline queue, service and attendance system for barangay offices. One Windows desktop
+        app, with no internet and no server to maintain.</p>
+</section>
+
+<!-- 2. WHAT'S NEW -->
+<section class="card">
+    <h2 class="card-title">{{ icon('check', 22) }} What's New in Version {{ app_version }}</h2>
+    <ul class="about-list">
+        <li>A new look, with a light and a dark mode (the sun and moon button at the top).</li>
+        <li>Any barangay can use it: the barangay name, logos and signatories are typed in at first start and can be
+            changed any time in Settings.</li>
+        <li>The printed attendance report has the barangay's own header and logos, and signature lines for the
+            Secretary (Prepared by) and the Captain (Noted by).</li>
+        <li>The app logs out by itself after 10 minutes without activity, so records are not left open at the
+            desk.</li>
+        <li>A backup is made automatically every day, without slowing down the front desk.</li>
+        <li>Registration asks only for the visitor's name, the service and the lane. The address is not asked for.</li>
+    </ul>
+</section>
+
+<!-- 3. SYSTEM INFORMATION -->
+<section class="card">
+    <h2 class="card-title">{{ icon('database', 22) }} System Information</h2>
+    <p class="hint">When you ask for help, press <strong>Copy details</strong> and paste them into your
+        message, so the developers know exactly what this computer is running.</p>
+    <dl class="sys-list" id="system-details">
+        {% for label, value in details %}
+        <div>
+            <dt>{{ label }}</dt>
+            <dd>{{ value }}</dd>
+        </div>
+        {% endfor %}
+    </dl>
+    <div class="sys-actions">
+        <button type="button" class="btn btn-primary" id="copy-details">{{ icon('clipboard', 18) }} Copy details</button>
+        <a class="btn btn-outline" href="/maintenance">{{ icon('database', 18) }} Backups and printer</a>
+        <span class="hint" id="copy-status" role="status"></span>
+    </div>
+</section>
+
+<!-- 4. QUICK HELP -->
+<section class="card">
+    <h2 class="card-title">{{ icon('file-text', 22) }} Quick Help</h2>
+    <div class="help-list">
+        <details>
+            <summary>The queue slip does not print</summary>
+            <p>Check that the printer is on, has paper, and its cable is plugged in. Then open
+                <a class="about-link" href="/maintenance">Maintenance</a>, choose the printer under Receipt printer,
+                and press <strong>Print test slip</strong>.</p>
+        </details>
+        <details>
+            <summary>I forgot my password</summary>
+            <p>On the login page, click <strong>Forgot password?</strong> and type the recovery key (it starts with
+                BQS-) that was saved during first-time setup. If the recovery key is lost too, contact the
+                developers.</p>
+        </details>
+        <details>
+            <summary>The names on the printed report are wrong or missing</summary>
+            <p>Open <a class="about-link" href="/settings#signatories">Settings</a> and edit the Signatories. The next
+                report you print uses the new names.</p>
+        </details>
+        <details>
+            <summary>We need old records back, or the computer broke</summary>
+            <p>The app makes a backup every day and keeps one for each of the last 14 days it was used. You can
+                also save a copy to a USB drive on the Maintenance page. Do not copy or replace the app's files
+                yourself: contact the developers and include the system details above.</p>
+        </details>
+    </div>
+</section>
+
+<!-- 5. DATA AND PRIVACY -->
+<section class="card">
+    <h2 class="card-title">{{ icon('shield', 22) }} Your Data and Privacy</h2>
+    <ul class="about-list">
+        <li>Everything is stored only on this computer, in the data folder shown above. The app does not use the
+            internet and sends nothing anywhere.</li>
+        <li>The records hold visitors' personal information, so the Data Privacy Act of 2012 (RA 10173) applies.
+            See the Terms of Use below.</li>
+        <li>Only the person with the account can open the records. Keep the password private and log out before
+            you leave the computer.</li>
+        <li>Backups hold the same personal information. Keep any USB drive with a backup in a locked place.</li>
+    </ul>
+</section>
+
+<!-- 6. DEVELOPERS -->
+<section class="card">
+    <h2 class="card-title">{{ icon('user', 22) }} Developers</h2>
+    <div class="team-grid">
+        {% for initials, name, role, email in [
+        ('JD', 'Joseph R. Dionisio', 'Full Stack Developer', 'dionisiojoseph213@gmail.com'),
+        ('JM', 'Jhade Lorenz G. Martin', 'Documentation, Hardware Integration and Testing Support',
+        'jhadelorenz650@gmail.com'),
+        ('KM', 'Katrina Jessica Manzanillo', 'QA Lead, Client Coordination and Consultation',
+        'manzanillokatrina1325@gmail.com'),
+        ] %}
+        <div class="team-card">
+            <div class="team-avatar" aria-hidden="true">{{ initials }}</div>
+            <p class="team-name">{{ name }}</p>
+            <span class="team-role">{{ role }}</span>
+            <p class="team-org">University of La Salette, Inc.</p>
+            <a class="team-email" href="mailto:{{ email }}">{{ icon('mail', 16) }} {{ email }}</a>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<!-- 7. TECHNOLOGIES USED -->
+<section class="card">
+    <h2 class="card-title">{{ icon('database', 22) }} Technologies Used</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Technologies</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for category, tech in [
+                ('Languages', 'Python 3.13, JavaScript, HTML5, CSS3'),
+                ('Backend', 'FastAPI, Uvicorn'),
+                ('Database', 'SQLite, SQLAlchemy'),
+                ('Frontend', 'Jinja2 templates, plain CSS, vanilla JavaScript, Plus Jakarta Sans'),
+                ('Live updates & audio', 'FastAPI WebSockets, pre-recorded MP3 announcements'),
+                ('Security', 'Session cookies (Starlette), bcrypt password hashing'),
+                ('Printing', 'python-escpos, pywin32 (ESC/POS thermal printer)'),
+                ('Desktop & packaging', 'pywebview, PyInstaller, Inno Setup'),
+                ] %}
+                <tr>
+                    <td class="cell-primary">{{ category }}</td>
+                    <td>{{ tech }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- 8. CONTACT -->
+<section class="card">
+    <h2 class="card-title">{{ icon('mail', 22) }} Contact</h2>
+    <p class="hint">Questions, bug reports or support requests? Reach us here. Say what you were doing, the exact
+        message on the screen (a phone photo is fine), and the system details above.</p>
+    <div class="contact-row">
+        <span class="label">Email</span>
+        <a class="about-link" href="mailto:{{ support_email }}">{{ support_email }}</a>
+    </div>
+    <div class="contact-row">
+        <span class="label">GitHub</span>
+        <a class="about-link" href="https://github.com/mathW1zzard/barangay-queue-management-system-barangay-4-san-mateo-"
+            target="_blank" rel="noopener noreferrer">github.com/mathW1zzard/barangay-queue-management-system</a>
+    </div>
+</section>
+
+<!-- 9. ACKNOWLEDGEMENTS -->
+<section class="card">
+    <h2 class="card-title">{{ icon('check', 22) }} Acknowledgements</h2>
+    <p class="hint">With sincere thanks to the people and communities who made this system possible.</p>
+    <ul class="ack-list">
+        {% for name, role in [
+        ('Hon. Leo Aguilar Umipig', 'Barangay Captain'),
+        ('Mary Joy D. Del Mundo', 'Barangay Secretary'),
+        ('Prof. King Christian D. Antonio', 'Project adviser'),
+        ('University of La Salette, Inc.', 'School'),
+        ] %}
+        <li><span class="ack-name">{{ name }}</span><span class="ack-role">{{ role }}</span></li>
+        {% endfor %}
+    </ul>
+</section>
+
+<!-- 10. TERMS OF USE -->
+<section class="card">
+    <details class="about-fold">
+        <summary>Terms of Use</summary>
+        {% if terms %}
+        <pre class="about-terms">{{ terms }}</pre>
+        {% else %}
+        <p class="hint">The terms file was not found. It is shown during installation.</p>
+        {% endif %}
+    </details>
+</section>
+
+<!-- 11. OPEN-SOURCE LICENSES -->
+<section class="card">
+    <details class="about-fold">
+        <summary>Open-Source Licenses</summary>
+        <p class="hint">{{ app_title }} is built with the open-source parts below. Each keeps its own license; the
+            full texts are in THIRD_PARTY_NOTICES.txt in the program folder.</p>
+        {% if licenses %}
+        <div class="table-wrap" style="margin-top: 12px;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Part</th>
+                        <th>Version</th>
+                        <th>License</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for part in licenses %}
+                    <tr>
+                        <td class="cell-primary">{{ part.name }}</td>
+                        <td>{{ part.version }}</td>
+                        <td>{{ part.license }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="hint" style="margin-top: 12px;">The list is made when the app is built (build_attendance.bat).</p>
+        {% endif %}
+    </details>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Copy details: the system information as plain lines, ready to paste into an email.
+    (() => {
+        const button = document.getElementById('copy-details');
+        const status = document.getElementById('copy-status');
+        const asText = () => [...document.querySelectorAll('#system-details > div')]
+            .map((row) => `${row.querySelector('dt').textContent.trim()}: ${row.querySelector('dd').textContent.trim()}`)
+            .join('\n');
+        const oldWay = (text) => {               // for a WebView that does not allow the clipboard API
+            const box = document.createElement('textarea');
+            box.value = text;
+            box.setAttribute('readonly', '');
+            box.style.position = 'fixed';
+            box.style.opacity = '0';
+            document.body.appendChild(box);
+            box.select();
+            const done = document.execCommand('copy');
+            box.remove();
+            return done;
+        };
+        button.addEventListener('click', async () => {
+            const text = asText();
+            let done = false;
+            try {
+                await navigator.clipboard.writeText(text);
+                done = true;
+            } catch {
+                done = oldWay(text);
+            }
+            status.textContent = done ? 'Copied. Paste it into your email to the developers.'
+                : 'Could not copy. Select the details above and press Ctrl+C.';
+        });
+    })();
+</script>
+{% endblock %}

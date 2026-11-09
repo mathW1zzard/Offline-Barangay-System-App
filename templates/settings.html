@@ -3,7 +3,7 @@
 {% block title %}Settings{% endblock %}
 {% block page_title %}Settings{% endblock %}
 {% block page_subtitle %}Barangay profile and printouts{% endblock %}
-{% block description %}Barangay profile, logos, signatories and document defaults{% endblock %}
+{% block description %}Barangay profile, logos, signatories{{ ' and document defaults' if has_documents }}{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="/static/document_header.css">
 {% endblock %}
@@ -48,7 +48,7 @@
     <a class="jump-link" href="#profile">Barangay profile</a>
     <a class="jump-link" href="#logos">Logos</a>
     <a class="jump-link" href="#signatories">Signatories</a>
-    <a class="jump-link" href="#documents">Document defaults</a>
+    {% if has_documents %}<a class="jump-link" href="#documents">Document defaults</a>{% endif %}
 </nav>
 
 <div class="settings-layout">
@@ -108,10 +108,12 @@
                 {{ value_row(values.signatory_secretary_title or 'Barangay Secretary', values.signatory_secretary_name)
                 }}
             </dl>
-            <p class="hint">Officials change after elections. Documents already issued keep the names they were printed
-                with.</p>
+            <p class="hint">{% if has_documents %}Officials change after elections. Documents already issued keep the names
+                they were printed with.{% else %}Printed on the attendance report: the Secretary under "Prepared by" and the
+                Captain under "Noted by". Officials change after elections.{% endif %}</p>
         </section>
 
+        {% if has_documents %}
         <!--DOCUMENT DEFAULTS-->
         <section class="card settings-section" id="documents">
             <div class="settings-head">
@@ -125,6 +127,7 @@
                 values.control_number_format)) }}
             </dl>
         </section>
+        {% endif %}
     </div>
 
     <!--HEADER PREVIEW: shows what is saved. While an Edit window is open it moves into that window.-->
@@ -183,7 +186,8 @@
         {{ color_choice(office_colors, shown.office_color, values.office_color) }}
         <p class="hint">Type the names the way they should print. The header shows: the first line, then
             "Municipality or city, Province", then the barangay name, and the office line below the logos. It appears
-            at the top of every certificate and report; the queue slip shows the name.</p>
+            at the top of every {{ 'certificate and report' if has_documents else 'attendance report' }}; the queue slip
+            shows the name.</p>
         <div class="modal-preview" data-preview-slot>
             <p class="label">Preview</p>
         </div>
@@ -262,8 +266,8 @@
                     maxlength="60" autocomplete="off" required>
             </div>
         </div>
-        <p class="hint">New printouts use these names right away. Documents already issued keep the names they were
-            printed with.</p>
+        <p class="hint">New printouts use these names right away.{% if has_documents %} Documents already issued keep the
+            names they were printed with.{% endif %}</p>
         <div class="modal-actions">
             <button type="button" class="btn btn-outline" data-cancel-edit>Cancel</button>
             <button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save signatories</button>
@@ -271,6 +275,7 @@
     </form>
 </dialog>
 
+{% if has_documents %}
 <!-- EDIT: DOCUMENT DEFAULTS -->
 <dialog class="modal modal-wide" id="edit-documents" data-keep-open data-section="documents">
     <form action="/settings/documents" method="post" class="modal-body form" id="form-documents">
@@ -297,6 +302,7 @@
         </div>
     </form>
 </dialog>
+{% endif %}
 
 <!-- ASKED WHEN CANCELLING WITH CHANGES -->
 <dialog class="modal" id="discard-dialog">
@@ -321,8 +327,9 @@
             <dt id="names-secretary-title"></dt>
             <dd id="names-secretary"></dd>
         </dl>
-        <p class="modal-text">They will print on every new certificate from now on. Documents already issued keep the
-            names they were printed with.</p>
+        <p class="modal-text">{% if has_documents %}They will print on every new certificate from now on. Documents
+            already issued keep the names they were printed with.{% else %}They will print on every attendance report from
+            now on.{% endif %}</p>
         <div class="modal-actions">
             <button type="button" class="btn btn-outline" data-close>Go back</button>
             <button type="button" class="btn btn-primary" id="names-go">Save names</button>

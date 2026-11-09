@@ -11,9 +11,10 @@ from app_logging import setup_logging, log
 setup_logging()   # first, so even an error while importing main is recorded
 
 from paths import resource_path, DATA_DIR
+import edition
 
 STARTUP_TIMEOUT = 30.0
-APP_TITLE = "Barangay System"
+APP_TITLE = edition.APP_TITLE        # each edition's name is set in edition.py
 
 def start_server():
     """Create the listening socket here and hand it to uvicorn, so no other program can grab
@@ -48,7 +49,8 @@ def acquire_single_instance() -> bool:
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
     k32.CreateMutexW.restype = ctypes.c_void_p
     k32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
-    _instance_handle = k32.CreateMutexW(None, False, "Local\\Barangay_System_SingleInstance")
+    # Each edition has its own name, so the two apps can be open on the same PC at the same time
+    _instance_handle = k32.CreateMutexW(None, False, edition.SINGLE_INSTANCE_NAME)
     return ctypes.get_last_error() != _ERROR_ALREADY_EXISTS
 
 if not acquire_single_instance():

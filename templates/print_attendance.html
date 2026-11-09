@@ -215,6 +215,17 @@
         .title h1{
             text-align: center;
         }
+
+        /* The first-run wizard's test report: says plainly that the visitors are made up */
+        .test-note {
+            margin: 0 0 14px;
+            padding: 8px 12px;
+            border: 1px dashed var(--orange);
+            border-radius: 6px;
+            color: var(--navy);
+            font-weight: 700;
+            text-align: center;
+        }
         /* ---------- Print ---------- */
         @media print {
 
@@ -257,9 +268,15 @@
     <div class="toolbar">
         <div class="filters-text">{{ filters_text }} ({{ total_rows }} record{{ '' if total_rows == 1 else 's' }})
         </div>
+        {% if test %}
+        <form action="/wizard/finish" method="get">
+            <button type="submit" class="btn-back">Back to setup</button>
+        </form>
+        {% else %}
         <form action="/attendance" method="get">
             <button type="submit" class="btn-back">Return to Attendance</button>
         </form>
+        {% endif %}
         <button type="button" class="btn-print" onclick="window.print()">Print</button>
     </div>
 
@@ -270,6 +287,9 @@
     <div class="page">
         {{ doc_header(branding) }}
 
+        {% if test %}
+        <p class="test-note">TEST REPORT: made-up visitors, not saved in the records</p>
+        {% endif %}
         <div class="title">
             <h1>ATTENDANCE REPORT</h1>
         </div>
@@ -294,7 +314,7 @@
                     <th>No.</th>
                     <th>Ticket#</th>
                     <th>Client Name</th>
-                    <th>Address</th>
+                    {% if asks_address %}<th>Address</th>{% endif %}
                     <th>Type</th>
                     <th>Service</th>
                     <th>Time In</th>
@@ -308,7 +328,7 @@
                     <td class="muted">{{ loop.index }}</td>
                     <td><strong>{{ v.ticket_number }}</strong></td>
                     <td><strong>{{ v.citizen_name }}</strong></td>
-                    <td class="addr">{{ v.address or '--' }}</td>
+                    {% if asks_address %}<td class="addr">{{ v.address or '--' }}</td>{% endif %}
                     <td class="muted">{% if v.lane == "P" %}Priority{% else %}Regular{% endif %}</td>
                     <td class="muted">{{ v.service_label }}</td>
                     <td class="muted nowrap">{{ v.called_at.strftime('%I:%M %p') if v.called_at else '--' }}</td>
@@ -319,7 +339,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="9" class="empty">No records match these filters.</td>
+                    <td colspan="{{ 9 if asks_address else 8 }}" class="empty">No records match these filters.</td>
                 </tr>
                 {% endfor %}
             </tbody>

@@ -13,7 +13,10 @@ import os
 import sys
 from pathlib import Path
 
-APP_NAME = "Barangay_Queuing_Attendance_Management"
+import edition
+
+# The data folder's name. Each edition has its own (see edition.py), so the two apps never share a database.
+APP_NAME = edition.DATA_FOLDER
 
 # PyInstaller sets sys.frozen, and sys._MEIPASS = the folder holding the bundled files
 FROZEN = getattr(sys, "frozen", False)
@@ -22,6 +25,9 @@ BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 if FROZEN:
     # Packaged app: C:\Users\<user>\AppData\Local\BarangayQueue
     DATA_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / APP_NAME
+elif edition.IS_ATTENDANCE:
+    # Development of the Attendance edition: its own subfolder, never the full app's database
+    DATA_DIR = Path(__file__).resolve().parent / "attendance_dev_data"
 else:
     # Development: keep using the project folder, so your current database still works
     DATA_DIR = Path(__file__).resolve().parent

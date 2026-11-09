@@ -16,22 +16,27 @@
 
         {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
         <form action="/register" method="post" class="form" id="register-form" data-needs-confirm>
-            <div class="form-row">
+            {#- The Attendance edition does not ask for the address: it is used on certificates only. -#}
+            <div{% if asks_address %} class="form-row"{% endif %}>
                 <div class="field">
                     <label for="citizen_name">Full name</label>
                     <input type="text" name="citizen_name" id="citizen_name"
                         value="{{ form.citizen_name if form else '' }}" autocomplete="off" maxlength="100" required
                         autofocus>
                 </div>
+                {% if asks_address %}
 
                 <div class="field">
                     <label for="address">Address <span class="label-note">Purok / Street</span></label>
                     <input type="text" name="address" id="address" value="{{ form.address if form else '' }}"
                         maxlength="150" autocomplete="off" required aria-describedby="address-hint">
                 </div>
+                {% endif %}
             </div>
+            {% if asks_address %}
             <p class="hint field-note" id="address-hint">The address is used on documents only. It is never printed on
                 the queue slip or shown on the display.</p>
+            {% endif %}
 
             <div class="field">
                 <label for="service_id">Service</label>
@@ -162,8 +167,10 @@
         <dl class="confirm-summary">
             <dt>Visitor</dt>
             <dd id="rc-name"></dd>
+            {% if asks_address %}
             <dt>Address</dt>
             <dd id="rc-address"></dd>
+            {% endif %}
             <dt>Service</dt>
             <dd id="rc-service"></dd>
             <dt>Lane</dt>
@@ -197,7 +204,9 @@
             const lane = form.querySelector('input[name="lane"]:checked');
             // textContent, never innerHTML: the name is user input
             document.getElementById('rc-name').textContent = form.elements['citizen_name'].value.trim().replace(/\s+/g, ' ');
-            document.getElementById('rc-address').textContent = form.elements['address'].value.trim().replace(/\s+/g, ' ') || 'Not given';
+            if (form.elements['address']) {     // not asked in the Attendance edition
+                document.getElementById('rc-address').textContent = form.elements['address'].value.trim().replace(/\s+/g, ' ') || 'Not given';
+            }
             document.getElementById('rc-service').textContent = service.selectedIndex >= 0 ? service.options[service.selectedIndex].text : '';
             document.getElementById('rc-lane').textContent = lane && lane.value === 'P' ? 'Priority' : 'Regular';
             dialog.showModal();

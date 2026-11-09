@@ -2,7 +2,7 @@
 {% from "_macros.html" import icon, page_links %}
 {% block title %}Audit Logs{% endblock %}
 {% block page_title %}Audit Logs{% endblock %}
-{% block page_subtitle %}Record of staff actions{% endblock %}
+{% block page_subtitle %}{{ 'Record of staff actions' if has_staff else 'Record of every action in the system' }}{% endblock %}
 {% block description %}Who did what in the system, and when{% endblock %}
 {% block content %}
 {# One encoded query string, shared by every pagination link #}
@@ -10,7 +10,7 @@
 
 <section class="list-section" aria-labelledby="audit-title">
     <div class="section-head">
-        <h2 id="audit-title">Staff activity</h2>
+        <h2 id="audit-title">{{ 'Staff activity' if has_staff else 'Activity' }}</h2>
     </div>
 
     <!--FILTERS-->

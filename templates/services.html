@@ -18,7 +18,7 @@
             <thead>
                 <tr>
                     <th>Service name</th>
-                    <th>Document to issue</th>
+                    {% if has_documents %}<th>Document to issue</th>{% endif %}
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -27,7 +27,7 @@
                 {% for service in services %}
                 <tr>
                     <td class="cell-primary">{{ service.service_name }}</td>
-                    <td>{{ doc_names.get(service.document_template_id, '--') }}</td>
+                    {% if has_documents %}<td>{{ doc_names.get(service.document_template_id, '--') }}</td>{% endif %}
                     <td>{{ badge(service.service_status) }}</td>
                     <td>
                         <div class="row-actions">
@@ -48,7 +48,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="4" class="empty-row">No services yet. Add the first service visitors can queue for.</td></tr>
+                <tr><td colspan="{{ 4 if has_documents else 3 }}" class="empty-row">No services yet. Add the first service visitors can queue for.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -73,6 +73,7 @@
                 <option value="Inactive">Inactive</option>
             </select>
         </div>
+        {% if has_documents %}
         <div class="field">
             <label for="add-template">Document to issue</label>
             <select name="document_template_id" id="add-template">
@@ -81,6 +82,7 @@
             </select>
             <p class="hint">Adds a Prepare document button for this service on the Now serving card.</p>
         </div>
+        {% endif %}
         <div class="modal-actions">
             <button type="button" class="btn btn-outline" data-close>Cancel</button>
             <button type="submit" class="btn btn-primary">Add service</button>
@@ -104,6 +106,7 @@
                 <option value="Inactive">Inactive</option>
             </select>
         </div>
+        {% if has_documents %}
         <div class="field">
             <label for="edit-template">Document to issue</label>
             <select name="document_template_id" id="edit-template">
@@ -112,6 +115,7 @@
             </select>
             <p class="hint">Adds a Prepare document button for this service on the Now serving card.</p>
         </div>
+        {% endif %}
         <div class="modal-actions">
             <button type="button" class="btn btn-outline" data-close>Cancel</button>
             <button type="submit" class="btn btn-primary">Save changes</button>
