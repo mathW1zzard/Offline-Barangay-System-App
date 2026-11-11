@@ -345,7 +345,9 @@
             <summary>The queue slip does not print</summary>
             <p>Check that the printer is on, has paper, and its cable is plugged in. Then open
                 <a class="about-link" href="/maintenance">Maintenance</a>, choose the printer under Receipt printer,
-                and press <strong>Print test slip</strong>.</p>
+                and press <strong>Print test slip</strong>. An inkjet or laser printer cannot print slips as a
+                thermal printer: choose <strong>Regular printer</strong> there, and a print window opens for each
+                slip.</p>
         </details>
         <details>
             <summary>I forgot my password</summary>
@@ -449,6 +451,22 @@
         <a class="about-link" href="https://github.com/mathW1zzard/barangay-queue-management-system-barangay-4-san-mateo-"
             target="_blank" rel="noopener noreferrer">github.com/mathW1zzard/barangay-queue-management-system</a>
     </div>
+</section>
+
+<!-- 9. ACKNOWLEDGEMENTS -->
+<section class="card">
+    <h2 class="card-title">{{ icon('check', 22) }} Acknowledgements</h2>
+    <p class="hint">With sincere thanks to the people and communities who made this system possible.</p>
+    <ul class="ack-list">
+        {% for name, role in [
+        ('Hon. Leo Aguilar Umipig', 'Barangay Captain'),
+        ('Mary Joy D. Del Mundo', 'Barangay Secretary'),
+        ('Prof. King Christian D. Antonio', 'Project adviser'),
+        ('University of La Salette, Inc.', 'School'),
+        ] %}
+        <li><span class="ack-name">{{ name }}</span><span class="ack-role">{{ role }}</span></li>
+        {% endfor %}
+    </ul>
 </section>
 
 <!-- 10. TERMS OF USE -->

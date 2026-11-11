@@ -603,6 +603,11 @@ def build_announcement_clips(ticket_number: str):
 AUTO_PRINT_ON_REGISTER = True
 PRINTER_SETTINGS_FILE = Path(data_path("printer_settings.json"))
 PAPER_COLUMNS = {"58": 32, "80": 48}           # characters per line on 58 mm and 80 mm paper
+# How queue slips are printed (Maintenance > Receipt printer):
+#   "thermal": raw ESC/POS straight to a 58 or 80 mm receipt printer, no print window (the default)
+#   "regular": any printer (inkjet or laser, Short, Long or A4 bond paper) through the print window,
+#              which opens on the Ticket Confirmation page after each registration
+PRINT_MODES = {"thermal": "Thermal receipt printer", "regular": "Regular printer (bond paper)"}
 VIRTUAL_PRINTER_WORDS = ("pdf", "xps", "onenote", "fax", "document writer")
 CHECK_PRINTER_STATUS = True                    # set False if Windows wrongly reports your printer as offline
 HAS_CUTTER = False            # tear-off printer; set True only if yours has a blade
@@ -633,13 +638,15 @@ def load_printer_settings() -> dict:
     if not isinstance(data, dict):
         data = {}
     paper = str(data.get("paper_mm", "58"))
+    mode = str(data.get("mode", "thermal"))      # files saved before 11 Nov 2026 have no mode: thermal
     return {"printer_name": str(data.get("printer_name", "")).strip(),
-            "paper_mm": paper if paper in PAPER_COLUMNS else "58"}
+            "paper_mm": paper if paper in PAPER_COLUMNS else "58",
+            "mode": mode if mode in PRINT_MODES else "thermal"}
 
 
-def save_printer_settings(printer_name: str, paper_mm: str) -> None:
+def save_printer_settings(printer_name: str, paper_mm: str, mode: str = "thermal") -> None:
     tmp = PRINTER_SETTINGS_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"printer_name": printer_name, "paper_mm": paper_mm}), encoding="utf-8")
+    tmp.write_text(json.dumps({"printer_name": printer_name, "paper_mm": paper_mm, "mode": mode}), encoding="utf-8")
     os.replace(tmp, PRINTER_SETTINGS_FILE)       # atomic, like the session key
 
 
@@ -781,9 +788,8 @@ def build_test_slip(columns: int) -> bytes:
     p.text(f"Paper setting: {columns} characters per line\n")
     
     p.text("\n" * FEED_LINES)
-    if HAS_CUTTER:
+    if HAS_CUTTER:                                # a tear-off printer gets no cut command (it can print a stray mark)
         p.cut()
-    p.cut()
     return p.output
 
 
@@ -1469,14 +1475,18 @@ def register_ticket(request: Request, citizen_name: str = Form(""), lane: str = 
     url = f"/client_registration/confirmation/{ticket_id}"
     notify_display_update()
     if AUTO_PRINT_ON_REGISTER:
-        sent = print_ticket(ticket_number, name, service_name, lane, created_at)
-        url += f"?printed={1 if sent else 0}"
+        if load_printer_settings()["mode"] == "regular":
+            url += "?printed=window"              # the confirmation page opens the print window itself
+        else:
+            sent = print_ticket(ticket_number, name, service_name, lane, created_at)
+            url += f"?printed={1 if sent else 0}"
     notify_display_update()
     return RedirectResponse(url=url, status_code=303)
 
 @app.get("/client_registration/confirmation/{ticket_id}", dependencies=[Depends(require("register"))])
 def show_ticket_confirmation(request: Request, ticket_id: int, printed: str = ""):
-    """printed: "1" = sent to the printer, "0" = the printer failed, "" = not printed yet."""
+    """printed: "1" = sent to the printer, "0" = the printer failed, "window" = open the print window
+    now (regular printer), "" = not printed yet."""
     db = SessionLocal()
     try:
         ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
@@ -1486,6 +1496,7 @@ def show_ticket_confirmation(request: Request, ticket_id: int, printed: str = ""
         return templates.TemplateResponse(request, "ticket_confirmation.html", {
             "ticket": ticket,
             "printed": printed,
+            "print_mode": load_printer_settings()["mode"],
         })
     finally:
         db.close()
@@ -1498,6 +1509,9 @@ def print_ticket_again(request: Request, ticket_id: int):
         ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
         if ticket is None:
             return RedirectResponse(url="/client_registration", status_code=303)
+        if load_printer_settings()["mode"] == "regular":
+            # The page prints through the print window; this only happens if its script did not run
+            return RedirectResponse(url=f"/client_registration/confirmation/{ticket_id}?printed=window", status_code=303)
         number = ticket.ticket_number
         sent = print_ticket(ticket.ticket_number, ticket.citizen_name,
                             ticket.service_label, ticket.lane, ticket.created_at)
@@ -2571,15 +2585,30 @@ def run_backup(request: Request, folder: str = Form("")):
     return RedirectResponse(url="/maintenance", status_code=303)
 
 @app.post("/maintenance/printer/save", dependencies=[Depends(require("maintenance"))])
-def save_printer(request: Request, printer_name: str = Form(""), paper_mm: str = Form("58")):
+def save_printer(request: Request, printer_name: str = Form(""), paper_mm: str = Form("58"),
+                 print_mode: str = Form("thermal")):
     name = clean_text(printer_name, 200)
-    if paper_mm not in PAPER_COLUMNS:
+    if print_mode not in PRINT_MODES:
+        flash(request, False, "Choose how the slips are printed.")
+    elif print_mode == "regular":
+        # The print window chooses the printer and paper, so the thermal choices are kept as they are
+        saved = load_printer_settings()
+        try:
+            save_printer_settings(saved["printer_name"], saved["paper_mm"], "regular")
+        except OSError as e:
+            log.exception("Saving printer settings failed")
+            flash(request, False, f"Could not save the printer settings: {e}")
+        else:
+            flash(request, True, "Slips will print on a regular printer. After each registration a print window "
+                                 "opens: choose the printer, then press Print.")
+            log_action("Settings", "Printer Changed", "Queue slips set to print on a regular printer (print window)", request)
+    elif paper_mm not in PAPER_COLUMNS:
         flash(request, False, "Choose 58 mm or 80 mm paper.")
     elif name and not USE_DUMMY_PRINTER and name not in list_windows_printers():
         flash(request, False, "That printer is not installed on this computer.")
     else:
         try:
-            save_printer_settings(name, paper_mm)
+            save_printer_settings(name, paper_mm, "thermal")
         except OSError as e:
             log.exception("Saving printer settings failed")
             flash(request, False, f"Could not save the printer settings: {e}")
@@ -2587,6 +2616,15 @@ def save_printer(request: Request, printer_name: str = Form(""), paper_mm: str =
             flash(request, True, f'Receipt printer saved: {name or "none"} ({paper_mm} mm paper).')
             log_action("Settings", "Printer Changed", f'Receipt printer set to "{name or "none"}" ({paper_mm} mm paper)', request)
     return RedirectResponse(url="/maintenance", status_code=303)
+
+
+@app.get("/maintenance/printer/sample", dependencies=[Depends(require("maintenance"))])
+def sample_slip(request: Request):
+    """A test slip with a made-up visitor, printed through the print window (regular printer)."""
+    from types import SimpleNamespace
+    ticket = SimpleNamespace(ticket_number="P-001", lane="P", citizen_name="Juan Dela Cruz",
+                             service_label="Barangay Clearance", created_at=datetime.now())
+    return templates.TemplateResponse(request, "slip_sample.html", {"ticket": ticket})
 
 
 @app.post("/maintenance/printer/test", dependencies=[Depends(require("maintenance"))])

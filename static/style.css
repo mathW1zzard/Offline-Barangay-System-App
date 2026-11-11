@@ -2546,6 +2546,47 @@ tbody tr.is-current:hover td {
     .ticket-slip {
         background: #fff;
     }
+
+    /* Regular printer (bond paper): a slip about 9 cm wide at the top centre of the sheet, with a dashed
+       cut line. Dark ink only, because print windows leave out background colours by default. */
+    .confirm-card.print-bond {
+        max-width: 90mm;
+        margin: 0 auto;
+    }
+
+    .print-bond .ticket-slip {
+        border: 1px dashed #000;
+        border-radius: 0;
+        padding: 6mm 6mm 5mm;
+    }
+
+    .print-bond .ticket-slip hr {
+        border-top-color: #000;
+    }
+
+    .print-bond .ticket-org,
+    .print-bond .ticket-number,
+    .print-bond .slip-row dd {
+        color: #000;
+    }
+
+    .print-bond .ticket-sub,
+    .print-bond .slip-row dt,
+    .print-bond .ticket-note {
+        color: #333;
+    }
+
+    .print-bond .ticket-lane {
+        background: none;
+        border: 1.5px solid #000;
+        color: #000;
+    }
+}
+
+/* Page margins for anything printed from the app's own pages (the queue slip). The attendance report
+   and certificates have their own page settings. */
+@page {
+    margin: 12mm;
 }
 
 /* ---------------------------------------------------------------- registration */
@@ -2634,6 +2675,50 @@ tbody tr.is-current:hover td {
 }
 
 .blocked-note[hidden] {
+    display: none;
+}
+
+/* Maintenance > Receipt printer: thermal or regular printer */
+.print-modes {
+    border: 0;
+    padding: 0;
+    margin: 0 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.print-modes legend {
+    font-weight: 700;
+    color: var(--heading);
+    margin-bottom: 8px;
+}
+
+.print-mode {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    cursor: pointer;
+    line-height: 1.45;
+}
+
+.print-mode:has(input:checked) {
+    border-color: var(--orange);
+    background: var(--orange-soft);
+}
+
+.print-mode input {
+    margin-top: 4px;
+    width: 18px;
+    height: 18px;
+    flex: none;
+    accent-color: var(--orange);
+}
+
+#thermal-fields[hidden] {
     display: none;
 }
 

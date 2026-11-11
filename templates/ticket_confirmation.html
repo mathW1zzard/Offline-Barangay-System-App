@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon %}
+{% from "_macros.html" import icon, queue_slip %}
 {% block title %}Ticket Confirmation{% endblock %}
 {% block page_title %}Ticket Confirmation{% endblock %}
 {% block description %}Confirms a newly registered queue ticket and prints the queue slip{% endblock %}
@@ -7,10 +7,22 @@
 
 {% block content %}
 <section class="confirm-page">
-    <div class="card confirm-card">
+    {#- print-bond: a regular printer prints the slip through the print window, sized for bond paper -#}
+    {% set regular = print_mode == 'regular' %}
+    <div class="card confirm-card{{ ' print-bond' if regular }}">
 
-        <!-- Printer status. printed: "1" = sent, "0" = failed, "" = not printed yet -->
-        {% if printed == "1" %}
+        <!-- Printer status. printed: "1" = sent, "0" = failed, "window" = print window opening, "" = not printed yet -->
+        {% if regular %}
+        <div class="confirm-status confirm-status-ok no-print" role="status">
+            {{ icon('check', 22) }}
+            <div>
+                <strong>Ticket registered.</strong>
+                <span>{% if printed == "window" %}The print window opens now: choose the printer, then press Print.{% else %}Press
+                    Print ticket slip, choose the printer, then press Print.{% endif %} Cut the slip along the dashed
+                    line.</span>
+            </div>
+        </div>
+        {% elif printed == "1" %}
         <div class="confirm-status confirm-status-ok no-print" role="status">
             {{ icon('check', 22) }}
             <div>
@@ -37,25 +49,22 @@
         {% endif %}
 
         <!-- The queue slip. The printed slip carries the same lines. -->
-        <article class="ticket-slip" id="ticket-slip" aria-label="Queue slip {{ ticket.ticket_number }}">
-            <p class="ticket-org">{{ barangay_name|upper }}</p>
-            <p class="ticket-sub">Official Queue Slip</p>
-            <hr>
-            <p class="ticket-number">{{ ticket.ticket_number }}</p>
-            <span class="ticket-lane {{ 'ticket-lane-priority' if ticket.lane == 'P' else 'ticket-lane-regular' }}">{{ 'Priority lane' if ticket.lane == 'P' else 'Regular lane' }}</span>
-            <hr>
-            <dl class="slip-details">
-                <div class="slip-row"><dt>Client name</dt><dd>{{ ticket.citizen_name }}</dd></div>
-                <div class="slip-row"><dt>Service</dt><dd>{{ ticket.service_label }}</dd></div>
-                <div class="slip-row"><dt>Date and time</dt><dd>{{ ticket.created_at.strftime('%b %d, %Y %I:%M %p') }}</dd></div>
-            </dl>
-            <hr>
-            <p class="ticket-note">Please wait for your number to be called. Thank you!</p>
-        </article>
+        {{ queue_slip(ticket, barangay_name) }}
 
         {#- The likely next step is the primary button and has the focus, so Enter does it: after a good
             print that is the next visitor; when the slip still needs printing, it is printing. -#}
         {% set next_visitor = printed == "1" %}
+        {% if regular %}
+        {#- Regular printer: the page itself opens the print window. After it closes, "Register the next
+            visitor" takes the focus, so Enter moves on (Print ticket slip prints it again). -#}
+        <div class="confirm-actions no-print">
+            <button type="button" class="btn btn-primary btn-block btn-lg" id="print-slip" {% if printed != "window" %}autofocus{% endif %}
+                {% if printed == "window" %}data-print-now{% endif %}>
+                {{ icon('printer', 20) }} Print ticket slip</button>
+            <a href="/client_registration" class="btn btn-outline btn-block btn-lg" id="next-visitor">{{ icon('user-plus', 20) }}
+                Register the next visitor</a>
+        </div>
+        {% else %}
         <div class="confirm-actions no-print">
             {% if next_visitor %}
             <a href="/client_registration" class="btn btn-primary btn-block btn-lg" autofocus>{{ icon('user-plus', 20) }}
@@ -72,6 +81,28 @@
                 the next visitor</a>
             {% endif %}
         </div>
+        {% endif %}
     </div>
 </section>
+{% endblock %}
+
+{% block scripts %}
+{% if print_mode == 'regular' %}
+<script>
+    (function () {
+        const printBtn = document.getElementById('print-slip');
+        const next = document.getElementById('next-visitor');
+        if (!printBtn) return;
+        printBtn.addEventListener('click', () => window.print());
+        // After the print window closes (printed or cancelled), Enter goes to the next visitor
+        window.addEventListener('afterprint', () => next && next.focus());
+        if (printBtn.hasAttribute('data-print-now')) {
+            // Open the print window once. Taking ?printed=window off the address means Back or a reload
+            // does not print the slip a second time.
+            history.replaceState(null, '', location.pathname);
+            setTimeout(() => window.print(), 300);
+        }
+    })();
+</script>
+{% endif %}
 {% endblock %}

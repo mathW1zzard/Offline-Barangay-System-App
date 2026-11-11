@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, queue_slip %}
+{#- Maintenance > Receipt printer > Print test slip, when slips print on a regular printer. Made-up visitor. -#}
+{% block title %}Test Slip{% endblock %}
+{% block page_title %}Test Slip{% endblock %}
+{% block description %}A test queue slip for a regular printer{% endblock %}
+{% block page_subtitle %}Regular printer{% endblock %}
+
+{% block content %}
+<section class="confirm-page">
+    <div class="card confirm-card print-bond">
+        <div class="confirm-status confirm-status-ok no-print" role="status">
+            {{ icon('printer', 22) }}
+            <div>
+                <strong>Test slip with a made-up visitor.</strong>
+                <span>Press Print test slip, choose the printer and paper (Short, Long or A4), then press Print. Check
+                    that the number is large and clear and the slip fits on the paper.</span>
+            </div>
+        </div>
+        {{ queue_slip(ticket, barangay_name) }}
+        <div class="confirm-actions no-print">
+            <button type="button" class="btn btn-primary btn-block btn-lg" id="print-slip" autofocus>{{ icon('printer', 20) }}
+                Print test slip</button>
+            <a href="/maintenance" class="btn btn-outline btn-block btn-lg">Back to Maintenance</a>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById('print-slip').addEventListener('click', () => window.print());
+</script>
+{% endblock %}

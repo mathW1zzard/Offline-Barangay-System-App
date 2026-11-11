@@ -345,3 +345,23 @@ page script can fill it in. -#}
 </div>
 {%- endfor %}
 {%- endmacro %}
+
+{#- The queue slip as shown on screen and printed through the print window (regular printer). The thermal
+    printer prints the same lines from build_slip() in main.py. Never add the address or age here. -#}
+{% macro queue_slip(ticket, barangay_name) -%}
+<article class="ticket-slip" id="ticket-slip" aria-label="Queue slip {{ ticket.ticket_number }}">
+    <p class="ticket-org">{{ barangay_name|upper }}</p>
+    <p class="ticket-sub">Official Queue Slip</p>
+    <hr>
+    <p class="ticket-number">{{ ticket.ticket_number }}</p>
+    <span class="ticket-lane {{ 'ticket-lane-priority' if ticket.lane == 'P' else 'ticket-lane-regular' }}">{{ 'Priority lane' if ticket.lane == 'P' else 'Regular lane' }}</span>
+    <hr>
+    <dl class="slip-details">
+        <div class="slip-row"><dt>Client name</dt><dd>{{ ticket.citizen_name }}</dd></div>
+        <div class="slip-row"><dt>Service</dt><dd>{{ ticket.service_label }}</dd></div>
+        <div class="slip-row"><dt>Date and time</dt><dd>{{ ticket.created_at.strftime('%b %d, %Y %I:%M %p') }}</dd></div>
+    </dl>
+    <hr>
+    <p class="ticket-note">Please wait for your number to be called. Thank you!</p>
+</article>
+{%- endmacro %}

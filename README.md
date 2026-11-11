@@ -95,8 +95,10 @@ This system replaces that with:
 ### Set up the receipt printer
 
 1. Install the printer in Windows as usual.
-2. Open **Maintenance → Receipt printer**, choose the printer and the paper width, and press **Save printer**.
-3. Press **Print test slip** to check that the text fits on one line.
+2. Open **Maintenance → Receipt printer** and choose how slips are printed:
+   - **Thermal receipt printer** (58 or 80 mm roll): choose the printer and the paper width. Each slip prints by itself.
+   - **Regular printer** (inkjet or laser, Short, Long or A4 bond paper): after each registration a print window opens; choose the printer and press Print, then cut the slip along the dashed line.
+3. Press **Save printer**, then **Print test slip** to check that the slip comes out clearly (on a thermal printer, that the test line fits on one row).
 
 ### Set up the certificates
 

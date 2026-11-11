@@ -316,7 +316,9 @@
             <summary>The queue slip does not print</summary>
             <p>Check that the printer is on, has paper, and its cable is plugged in. Then open
                 {% if can(request, 'maintenance') %}<a class="about-link" href="/maintenance">Maintenance</a>{% else %}<strong>Maintenance</strong> (or ask the administrator){% endif %}, choose the printer under Receipt printer,
-                and press <strong>Print test slip</strong>.</p>
+                and press <strong>Print test slip</strong>. An inkjet or laser printer cannot print slips as a
+                thermal printer: choose <strong>Regular printer</strong> there, and a print window opens for each
+                slip.</p>
         </details>
         <details>
             <summary>I forgot my password</summary>

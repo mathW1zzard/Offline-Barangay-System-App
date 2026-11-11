@@ -24,37 +24,68 @@
 
 <section class="card">
     <h2 class="card-title">Receipt printer</h2>
-    {% if dummy_printer %}
+    {% set regular = printer.mode == 'regular' %}
+    {% if dummy_printer and not regular %}
     <div class="alert alert-error" role="alert">Test mode: slips are saved to a file and nothing is printed.</div>
     {% endif %}
-    {% if printer.printer_name and printer.printer_name not in printers and not dummy_printer %}
+    {% if not regular and printer.printer_name and printer.printer_name not in printers and not dummy_printer %}
     <div class="alert alert-error" role="alert">The saved printer "{{ printer.printer_name }}" is not installed on this computer. Choose it again below.</div>
     {% endif %}
-    <p class="hint">Pick the thermal printer exactly as Windows lists it, and the width of the paper roll (58 mm is the small
-        roll, 80 mm the wide one). Then press <strong>Print test slip</strong>.</p>
-    <form action="/maintenance/printer/save" method="post" class="filters">
-        <div class="field field-grow">
-            <label for="printer_name">Printer</label>
-            <select name="printer_name" id="printer_name">
-                <option value="">-- none selected --</option>
-                {% for name in printers %}
-                <option value="{{ name }}" {{ 'selected' if name == printer.printer_name }}>{{ name }}</option>
-                {% endfor %}
-            </select>
+    <form action="/maintenance/printer/save" method="post" id="printer-form">
+        <fieldset class="print-modes">
+            <legend>How are queue slips printed?</legend>
+            <label class="print-mode">
+                <input type="radio" name="print_mode" value="thermal" {{ 'checked' if not regular }}>
+                <span><strong>Thermal receipt printer</strong> (58 or 80 mm roll). The slip prints by itself after each
+                    registration.</span>
+            </label>
+            <label class="print-mode">
+                <input type="radio" name="print_mode" value="regular" {{ 'checked' if regular }}>
+                <span><strong>Regular printer</strong> (inkjet or laser, Short, Long or A4 bond paper). After each
+                    registration a print window opens: choose the printer and press Print, then cut the slip along
+                    the dashed line.</span>
+            </label>
+        </fieldset>
+
+        {#- Only for the thermal printer. A regular printer is chosen in the print window instead. -#}
+        <div id="thermal-fields" {{ 'hidden' if regular }}>
+            <p class="hint">Pick the thermal printer exactly as Windows lists it, and the width of the paper roll (58 mm
+                is the small roll, 80 mm the wide one). Inkjet and laser printers cannot print here: choose
+                <strong>Regular printer</strong> above for them.</p>
+            <div class="filters">
+                <div class="field field-grow">
+                    <label for="printer_name">Printer</label>
+                    <select name="printer_name" id="printer_name">
+                        <option value="">-- none selected --</option>
+                        {% for name in printers %}
+                        <option value="{{ name }}" {{ 'selected' if name == printer.printer_name }}>{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="paper_mm">Paper width</label>
+                    <select name="paper_mm" id="paper_mm">
+                        <option value="58" {{ 'selected' if printer.paper_mm == '58' }}>58 mm</option>
+                        <option value="80" {{ 'selected' if printer.paper_mm == '80' }}>80 mm</option>
+                    </select>
+                </div>
+            </div>
         </div>
-        <div class="field">
-            <label for="paper_mm">Paper width</label>
-            <select name="paper_mm" id="paper_mm">
-                <option value="58" {{ 'selected' if printer.paper_mm == '58' }}>58 mm</option>
-                <option value="80" {{ 'selected' if printer.paper_mm == '80' }}>80 mm</option>
-            </select>
+        <div class="filters">
+            <button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save printer</button>
         </div>
-        <button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save printer</button>
     </form>
+    {#- The test uses the SAVED choice, so save first when switching -#}
+    {% if regular %}
+    <div class="filters">
+        <a href="/maintenance/printer/sample" class="btn btn-outline">{{ icon('printer', 18) }} Print test slip</a>
+    </div>
+    {% else %}
     <form action="/maintenance/printer/test" method="post" class="filters">
         <button type="submit" class="btn btn-outline" {% if not printer.printer_name and not dummy_printer %}disabled{% endif %}>
             {{ icon('printer', 18) }} Print test slip</button>
     </form>
+    {% endif %}
 </section>
 
 <section class="card">
@@ -82,4 +113,17 @@
         </div>
     </form>
 </dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    (function () {
+        const form = document.getElementById('printer-form');
+        const thermal = document.getElementById('thermal-fields');
+        if (!form || !thermal) return;
+        form.querySelectorAll('input[name="print_mode"]').forEach((r) => r.addEventListener('change', () => {
+            thermal.hidden = form.elements['print_mode'].value !== 'thermal';
+        }));
+    })();
+</script>
 {% endblock %}
