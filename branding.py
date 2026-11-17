@@ -25,6 +25,9 @@ DEFAULTS = {
     "logo_left_pic": "",          # the number of the picture in the pictures table ("" = no logo)
     "logo_right_pic": "",
     "logo_third_pic": "",
+    "logo_fourth_pic": "",        # the second logo on the left (v2.1.0)
+    "logo_fifth_pic": "",         # the third logo on the left
+    "logo_sixth_pic": "",         # the third logo on the right
     # Signatories
     "signatory_captain_name": "",
     "signatory_captain_title": "Barangay Captain",
@@ -108,8 +111,16 @@ def validate_documents(v: dict) -> str | None:
     return None
 
 # ---------------------------------------------------------------- logos
-LOGO_SLOTS = ("left", "right", "third")
-LOGO_LABELS = {"left": "Left logo", "right": "Right logo", "third": "Third logo"}
+# Up to six logos (v2.1.0). The slot names "left", "right" and "third" are the ones older versions
+# saved, so they keep their places: "left" is the first logo on the left, "right" and "third" the
+# first two on the right. The order here is the order across the page: the left side, then the right.
+#   1 to 4 logos: beside the header text, each on its own side.
+#   5 or 6 logos: all in one row ABOVE the header text (LOGOS_ON_TOP_FROM), left side first.
+LOGO_SIDES = {"left": ("left", "fourth", "fifth"), "right": ("right", "third", "sixth")}
+LOGO_SLOTS = LOGO_SIDES["left"] + LOGO_SIDES["right"]
+LOGO_LABELS = {"left": "Left logo 1", "fourth": "Left logo 2", "fifth": "Left logo 3",
+               "right": "Right logo 1", "third": "Right logo 2", "sixth": "Right logo 3"}
+LOGOS_ON_TOP_FROM = 5
 MAX_LOGO_BYTES = 2 * 1024 * 1024        # about 2 MB
 LOGO_MAX_SIDE = 600                     # pixels on the longest side
 

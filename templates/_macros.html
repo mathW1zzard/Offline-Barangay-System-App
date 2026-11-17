@@ -243,17 +243,21 @@ page script can fill it in. -#}
 {#- The header of every printed page (step 8c layout). b = the branding dict, or a document's saved
    copy of it: line 1 (Republic of the Philippines), the place ("Municipality, Province"), the barangay
    name, the logos, and the office line with its colour, printed below the logos above the rule. -#}
+{#- Logos (v2.1.0): up to six. 1 to 4 sit beside the header text, each on its side; with 5 or 6 the
+   box gets "logos-top" and all of them form one row above the text. branding_form.js sets the same
+   class on the live preview. -#}
 {% macro doc_header(b, ids=False) -%}
-    <div class="doc-head-box" style="--office-color: {{ b.office_color or '#C62828' }}">
+    {%- set L = b.logos -%}
+    {%- set shown = [L.left, L.fourth, L.fifth, L.right, L.third, L.sixth]|select|list|length -%}
+    <div class="doc-head-box{{ ' logos-top' if shown >= 5 }}" data-logos-top-from="5" style="--office-color: {{ b.office_color or '#C62828' }}">
         <header class="doc-head">
-            <div class="doc-logos">{{ _logo(b.logos.left, 'pv-left', ids) }}</div>
+            <div class="doc-logos">{{ _logo(L.left, 'pv-left', ids) }}{{ _logo(L.fourth, 'pv-fourth', ids) }}{{ _logo(L.fifth, 'pv-fifth', ids) }}</div>
             <div class="doc-title">
                 <p class="doc-line1" {% if ids %} id="pv-line1" {% endif %}>{{ b.header_line_1 }}</p>
                 <p class="doc-place" {% if ids %} id="pv-place" {% endif %}>{{ (b.place or '')|upper }}</p>
                 <h1 class="doc-name" {% if ids %} id="pv-name" {% endif %}>{{ b.name|upper }}</h1>
             </div>
-            <div class="doc-logos doc-logos-right">{{ _logo(b.logos.right, 'pv-right', ids) }}{{ _logo(b.logos.third,
-                'pv-third', ids) }}</div>
+            <div class="doc-logos doc-logos-right">{{ _logo(L.right, 'pv-right', ids) }}{{ _logo(L.third, 'pv-third', ids) }}{{ _logo(L.sixth, 'pv-sixth', ids) }}</div>
         </header>
         <p class="doc-office" {% if ids %} id="pv-office" {% endif %}>{{ (b.header_line_2 or '')|upper }}</p>
     </div>

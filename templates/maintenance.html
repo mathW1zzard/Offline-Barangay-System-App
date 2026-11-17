@@ -75,17 +75,17 @@
             <button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save printer</button>
         </div>
     </form>
-    {#- The test uses the SAVED choice, so save first when switching -#}
-    {% if regular %}
-    <div class="filters">
+    {#- The test button matches the choice that is PICKED (the script swaps them), so picking Regular
+        printer and testing before saving never sends a thermal test to an inkjet or laser printer. -#}
+    <div class="filters" id="test-regular" {{ 'hidden' if not regular }}>
         <a href="/maintenance/printer/sample" class="btn btn-outline">{{ icon('printer', 18) }} Print test slip</a>
     </div>
-    {% else %}
-    <form action="/maintenance/printer/test" method="post" class="filters">
+    <form action="/maintenance/printer/test" method="post" class="filters" id="test-thermal" {{ 'hidden' if regular }}>
         <button type="submit" class="btn btn-outline" {% if not printer.printer_name and not dummy_printer %}disabled{% endif %}>
             {{ icon('printer', 18) }} Print test slip</button>
     </form>
-    {% endif %}
+    <p class="hint unsaved-note" id="printer-unsaved" hidden>Not saved yet: press <strong>Save printer</strong> so the
+        slips after each registration use this choice too.</p>
 </section>
 
 <section class="card">
@@ -121,8 +121,16 @@
         const form = document.getElementById('printer-form');
         const thermal = document.getElementById('thermal-fields');
         if (!form || !thermal) return;
+        const saved = '{{ printer.mode }}';
+        const testThermal = document.getElementById('test-thermal');
+        const testRegular = document.getElementById('test-regular');
+        const unsaved = document.getElementById('printer-unsaved');
         form.querySelectorAll('input[name="print_mode"]').forEach((r) => r.addEventListener('change', () => {
-            thermal.hidden = form.elements['print_mode'].value !== 'thermal';
+            const picked = form.elements['print_mode'].value;
+            thermal.hidden = picked !== 'thermal';
+            testThermal.hidden = picked !== 'thermal';
+            testRegular.hidden = picked !== 'regular';
+            unsaved.hidden = picked === saved;
         }));
     })();
 </script>

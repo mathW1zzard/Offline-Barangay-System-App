@@ -1,5 +1,5 @@
 BARANGAY SYSTEM
-Version 2.0.0 - Developed by Jo-Tech-Developer
+Version 2.1.0 - Developed by Jo-Tech-Developer
 
 TERMS AND CONDITIONS OF USE
 Effective November 2026

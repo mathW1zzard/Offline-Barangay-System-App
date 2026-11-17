@@ -6,6 +6,9 @@
              OFFICE OF THE PUNONG BARANGAY          <- the office line, in its own colour
    ___________________________________________________
 
+   Up to six logos (v2.1.0). With 1 to 4 they sit beside the text as above (up to 2 a side, or 3 on
+   one side). With 5 or 6 the box has the class "logos-top": all logos in one row, the text below.
+
    The logos have one fixed size and never shrink: a long name wraps onto a second line instead.
    Both logo columns are as wide as the wider side, so the name stays in the middle of the page. */
 .doc-head-box {
@@ -17,10 +20,35 @@
     border-bottom: 2px solid var(--navy, #1b2a4a);
 }
 
-/* Two logos on the right: both sides make room for two, so the name stays centred */
-.doc-head-box:has(.doc-logos-right img:not([hidden]) + img:not([hidden])) {
+/* Two logos on either side: both sides make room for two, so the name stays centred.
+   (~ and not +, because the Settings preview keeps the empty slots in between, hidden.) */
+.doc-head-box:has(.doc-logos img:not([hidden]) ~ img:not([hidden])) {
     --side: calc(var(--logo-w) * 2 + 8px);
 }
+
+/* Three on one side (and so at most one on the other): smaller logos, so the name keeps its room */
+.doc-head-box:not(.logos-top):has(.doc-logos img:not([hidden]) ~ img:not([hidden]) ~ img:not([hidden])) {
+    --logo-w: 66px;
+    --logo-h: 60px;
+    --side: calc(var(--logo-w) * 3 + 16px);
+}
+
+/* Five or six logos: one centred row of logos on top, the header text underneath, nothing beside it */
+.doc-head-box.logos-top {
+    --logo-w: 84px;
+    --logo-h: 76px;
+}
+
+.doc-head-box.logos-top .doc-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 12px;
+}
+
+.doc-head-box.logos-top .doc-logos { gap: 12px; }
+.doc-head-box.logos-top .doc-head > .doc-logos { flex: 0 1 auto; }
+.doc-head-box.logos-top .doc-head > .doc-title { flex: 1 0 100%; order: 2; }
 
 .doc-head {
     display: grid;
@@ -111,5 +139,7 @@
     .doc-head > .doc-logos { flex: 0 1 auto; }
     .doc-head > .doc-title { flex: 1 0 100%; order: 2; }
     .doc-head-box { --logo-w: 70px; --logo-h: 62px; }
+    .doc-head-box.logos-top { --logo-w: 56px; --logo-h: 50px; }   /* six still fit in one row */
+    .doc-head-box.logos-top .doc-head, .doc-head-box.logos-top .doc-logos { gap: 8px; }
     .doc-name, .doc-office { font-size: 17px; }
 }

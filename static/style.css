@@ -2722,6 +2722,17 @@ tbody tr.is-current:hover td {
     display: none;
 }
 
+#test-thermal[hidden],
+#test-regular[hidden],
+.unsaved-note[hidden] {
+    display: none;
+}
+
+.unsaved-note {
+    margin-top: 8px;
+    color: var(--amber-ink);
+}
+
 .reg-card .lane-choice legend {
     margin-bottom: 8px;
 }

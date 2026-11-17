@@ -5,8 +5,19 @@
     const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
     // ---------- Live header preview (text) ----------
-    const pv = { line1: $('#pv-line1'), place: $('#pv-place'), name: $('#pv-name'), office: $('#pv-office'),
-                 left: $('#pv-left'), right: $('#pv-right'), third: $('#pv-third') };
+    const pv = { line1: $('#pv-line1'), place: $('#pv-place'), name: $('#pv-name'), office: $('#pv-office') };
+    $$('.logo-slot').forEach((slot) => { pv[slot.dataset.slot] = $('#pv-' + slot.dataset.slot); });
+
+    // Five or six logos: the preview moves them to one row above the header text, like the printout.
+    // Also called by the Settings page after Cancel puts the saved pictures back.
+    const updateLogoLayout = () => {
+        $$('.doc-head-box[data-logos-top-from]').forEach((box) => {
+            if (!$('img[id^="pv-"]', box)) return;        // only the live preview, never a finished page
+            const shown = $$('.doc-logos img', box).filter((img) => !img.hidden).length;
+            box.classList.toggle('logos-top', shown >= Number(box.dataset.logosTopFrom));
+        });
+    };
+    window.updateLogoLayout = updateLogoLayout;
     const profileForm = $('#form-profile');
 
     // ---------- The colour of the office line: ready colours or her own, kept in a hidden box ----------
@@ -68,6 +79,7 @@
                 else { img.removeAttribute('src'); img.hidden = true; }
             });
             empty.hidden = Boolean(src);
+            updateLogoLayout();
         };
 
         $('[data-logo-choose]', slot).addEventListener('click', () => file.click());

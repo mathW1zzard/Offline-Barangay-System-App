@@ -13,14 +13,14 @@
             {{ icon('printer', 22) }}
             <div>
                 <strong>Test slip with a made-up visitor.</strong>
-                <span>Press Print test slip, choose the printer and paper (Short, Long or A4), then press Print. Check
-                    that the number is large and clear and the slip fits on the paper.</span>
+                <span>The print window opens now: choose the printer and paper (Short, Long or A4), then press
+                    Print. Check that the number is large and clear and the slip fits on the paper.</span>
             </div>
         </div>
         {{ queue_slip(ticket, barangay_name) }}
         <div class="confirm-actions no-print">
-            <button type="button" class="btn btn-primary btn-block btn-lg" id="print-slip" autofocus>{{ icon('printer', 20) }}
-                Print test slip</button>
+            <button type="button" class="btn btn-primary btn-block btn-lg" id="print-slip">{{ icon('printer', 20) }}
+                Print again</button>
             <a href="/maintenance" class="btn btn-outline btn-block btn-lg">Back to Maintenance</a>
         </div>
     </div>
@@ -29,6 +29,12 @@
 
 {% block scripts %}
 <script>
-    document.getElementById('print-slip').addEventListener('click', () => window.print());
+    (function () {
+        const printBtn = document.getElementById('print-slip');
+        printBtn.addEventListener('click', () => window.print());
+        // Same as after registering: the print window opens by itself, once
+        setTimeout(() => window.print(), 300);
+        window.addEventListener('afterprint', () => printBtn.focus());
+    })();
 </script>
 {% endblock %}

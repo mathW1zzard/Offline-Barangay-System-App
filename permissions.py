@@ -20,6 +20,8 @@ PERMISSIONS = [
     ("Documents", "templates", "Edit templates and designs", "The wording, details, design and spacing of each certificate"),
     ("Records", "dashboard", "View dashboard", "Today's totals, the live queue and tickets by service"),
     ("Records", "attendance", "View attendance", "Search, print and download the visitor logbook"),
+    ("Records", "edit_attendance", "Correct attendance records",
+     "Fix a typing mistake in a saved visit: the name, age, address or service"),
     ("Records", "audit", "View audit log", "Who did what, and when"),
     ("Setup", "services", "Manage services", "Add, edit or remove services and link them to certificates"),
     ("Setup", "settings", "Change Settings", "Barangay profile, logos, signatories and document defaults"),
@@ -30,7 +32,8 @@ LABELS = {p[1]: p[2] for p in PERMISSIONS}
 
 # Some permissions only work together with another one: Add OR and Void are buttons on the
 # Issued documents list, so they need View issued documents. Saving a role adds it automatically.
-NEEDS = {"add_or": "view_issued", "void": "view_issued"}
+# Correcting a record is a button on the Attendance page, so it needs View attendance.
+NEEDS = {"add_or": "view_issued", "void": "view_issued", "edit_attendance": "attendance"}
 
 ADMIN_ROLE = "Administrator"
 # Not a tick box: only the built-in Administrator role has it (Staff accounts and Roles).
@@ -38,7 +41,7 @@ ADMIN_ONLY = "admin_only"
 # The one starter role a new or upgraded installation gets. The administrator can edit or delete it.
 SECRETARY_ROLE = "Secretary"
 SECRETARY = ("register", "queue", "issue", "view_issued", "add_or", "void", "templates",
-             "dashboard", "attendance", "services")
+             "dashboard", "attendance", "edit_attendance", "services")
 
 # Where a person lands after logging in: the first of these pages their role allows
 HOME_PAGES = (("dashboard", "/dashboard"), ("register", "/client_registration"), ("queue", "/queue_management"),

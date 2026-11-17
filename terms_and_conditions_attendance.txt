@@ -1,5 +1,5 @@
 BARANGAY QUEUING AND ATTENDANCE MANAGEMENT SYSTEM
-Version 2.0.0 - Developed by Soft-Tech Builders
+Version 2.1.0 - Developed by Soft-Tech Builders
 
 TERMS AND CONDITIONS OF USE
 Effective November 2026

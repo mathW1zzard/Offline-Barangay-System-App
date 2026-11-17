@@ -111,7 +111,7 @@ def branding_context(request: Request) -> dict:
 templates = Jinja2Templates(directory=resource_path("templates"), context_processors=[branding_context])
 
 APP_TITLE = edition.APP_TITLE                 # the name people see; each edition's is set in edition.py
-APP_VERSION = "2.0.0"                         # keep the same as MyAppVersion in installer.iss and installer_attendance.iss
+APP_VERSION = "2.1.0"                         # keep the same as MyAppVersion in installer.iss and installer_attendance.iss
 APP_RELEASED = "November 2026"               # when this version came out (About page)
 APP_OWNER = edition.APP_OWNER                 # shown in every footer and on the About page
 SUPPORT_EMAIL = edition.SUPPORT_EMAIL         # where barangays send questions and problem reports
@@ -186,7 +186,7 @@ def current_priority_streak(db) -> int:
 THROTTLE_MAX_FAILURES, THROTTLE_WINDOW_SECONDS = 5, 60
 
 # ADMIN LOGS
-LOG_CATEGORIES = ["Queue", "Service", "Settings", "Security", "Database"]
+LOG_CATEGORIES = ["Queue", "Attendance", "Service", "Settings", "Security", "Database"]
 if edition.HAS_DOCUMENTS:
     LOG_CATEGORIES.append("Documents")
 if edition.HAS_STAFF:
@@ -1790,6 +1790,7 @@ def show_attendance(
     q: str = "",
     page: str = "1",
 ):  
+    message = request.session.pop("flash", None)      # "Record corrected." after an edit
     service_id_int = parse_optional_int(service_id)
     
     if service_id and parse_optional_int(service_id) is None:
@@ -1824,6 +1825,8 @@ def show_attendance(
         response = templates.TemplateResponse(request, "attendance.html", {
             "visits": visits,
             "services": services,
+            "message": message,
+            "max_age": MAX_AGE,
             
             "date_from": d_from.isoformat(),   # feeds the "From Date" input
             "date_to": d_to.isoformat(),
@@ -1840,6 +1843,66 @@ def show_attendance(
     finally:
         db.close()
     return response
+
+# ---- Correcting a saved visit (v2.1.0, asked for by the Barangay 2 secretary)
+# Only what was TYPED at registration can be corrected: the name, age, address and service.
+# The ticket number, the lane, the times and the status are what happened, so they stay locked.
+# Every correction writes one audit line with the old and the new value.
+BACK_QUERY = re.compile(r"[A-Za-z0-9_=&%+.\-]{0,400}")     # the Attendance filters to return to
+
+
+@app.post("/attendance/edit/{visit_id}", dependencies=[Depends(require("edit_attendance"))])
+def edit_attendance_record(request: Request, visit_id: int, citizen_name: str = Form(""), age: str = Form(""),
+                           address: str = Form(""), service_id: str = Form(""), back: str = Form("")):
+    back_url = "/attendance" + (f"?{back}" if back and BACK_QUERY.fullmatch(back) else "")
+
+    def answer(ok: bool, text_: str):
+        flash(request, ok, text_)
+        return RedirectResponse(url=back_url, status_code=303)
+
+    name, years, sid = clean_text(citizen_name, 100), read_age(age), parse_optional_int(service_id)
+    addr = clean_text(address, 150) or None
+    changes = []
+    with SessionLocal() as db:
+        visit = db.get(Visit, visit_id)
+        if visit is None:
+            return answer(False, "That record could not be found. Nothing was changed.")
+        if not name:
+            return answer(False, "Client name is required. Nothing was changed.")
+        if not name_is_valid(name):
+            return answer(False, "The name can only have letters, spaces, and the marks . - ' "
+                                 "(no numbers or other symbols). Nothing was changed.")
+        # A box may stay empty only when the record never had that detail (visits saved by older versions)
+        if years is None and (age.strip() or visit.age is not None):
+            return answer(False, f"Please enter the age in years (a number from 0 to {MAX_AGE}). Nothing was changed.")
+        if addr is None and visit.address:
+            return answer(False, "Please enter the client's address (Purok / Street). Nothing was changed.")
+        if sid is None:
+            sid = visit.service_id                  # no choice sent: keep the saved service
+        if sid != visit.service_id:
+            service = db.query(Service).filter(Service.id == sid, Service.service_status == "Active").first()
+            if service is None:
+                return answer(False, "Selected service is unavailable. Nothing was changed.")
+            changes.append(f'service "{visit.service_label}" -> "{service.service_name}"')
+            visit.service_id = sid
+        if visit.citizen_name != name:
+            changes.append(f'name "{visit.citizen_name}" -> "{name}"')
+            visit.citizen_name = name
+        if visit.age != years:
+            changes.append(f'age {visit.age if visit.age is not None else "(none)"} -> {years}')
+            visit.age = years
+        if (visit.address or None) != addr:
+            changes.append(f'address "{visit.address or ""}" -> "{addr}"')
+            visit.address = addr
+        ticket, day = visit.ticket_number, visit.created_at
+        if changes:
+            db.commit()
+    if not changes:
+        return answer(True, "Nothing was changed.")
+    log_action("Attendance", "Record Corrected",
+               f"Ticket {ticket} ({day:%b %d, %Y}): " + "; ".join(changes), request)
+    return answer(True, f"Record corrected: ticket {ticket}.")
+
 
 def resolve_date_range(date_from: str, date_to: str):
     """
@@ -2794,11 +2857,15 @@ def save_settings_documents(request: Request, control_number_format: str = Form(
 @app.post("/settings/logos", dependencies=[Depends(require("settings"))])
 def save_settings_logos(request: Request,
                         logo_left: UploadFile | None = File(None), logo_right: UploadFile | None = File(None),
-                        logo_third: UploadFile | None = File(None),
-                        remove_left: str = Form("0"), remove_right: str = Form("0"), remove_third: str = Form("0")):
+                        logo_third: UploadFile | None = File(None), logo_fourth: UploadFile | None = File(None),
+                        logo_fifth: UploadFile | None = File(None), logo_sixth: UploadFile | None = File(None),
+                        remove_left: str = Form("0"), remove_right: str = Form("0"), remove_third: str = Form("0"),
+                        remove_fourth: str = Form("0"), remove_fifth: str = Form("0"), remove_sixth: str = Form("0")):
     uploads, removals = logo_changes_from_form(
-        {"left": logo_left, "right": logo_right, "third": logo_third},
-        {"left": remove_left, "right": remove_right, "third": remove_third})
+        {"left": logo_left, "right": logo_right, "third": logo_third,
+         "fourth": logo_fourth, "fifth": logo_fifth, "sixth": logo_sixth},
+        {"left": remove_left, "right": remove_right, "third": remove_third,
+         "fourth": remove_fourth, "fifth": remove_fifth, "sixth": remove_sixth})
     try:
         changes = apply_logos(request, uploads, removals)
     except branding.LogoError as e:
@@ -2808,7 +2875,7 @@ def save_settings_logos(request: Request,
 @app.get("/branding/{slot}.png")
 def branding_logo(slot: str):
     """The saved logos (kept inside the database since step 8b). Open to everyone on purpose (so the
-    sign-in screens can show them); the server only listens on this computer. Serves only the three
+    sign-in screens can show them); the server only listens on this computer. Serves only the six
     known slot names, never a picture chosen by number."""
     picture_id = branding.logo_picture_id(slot) if slot in branding.LOGO_SLOTS else None
     found = pictures.load(picture_id) if picture_id else None
@@ -2897,14 +2964,18 @@ def save_wizard_profile(request: Request, barangay_name: str = Form(""), municip
 @app.post("/wizard/logos", dependencies=[Depends(wizard_login)])
 def save_wizard_logos(request: Request,
                       logo_left: UploadFile | None = File(None), logo_right: UploadFile | None = File(None),
-                      logo_third: UploadFile | None = File(None),
-                      remove_left: str = Form("0"), remove_right: str = Form("0"), remove_third: str = Form("0")):
+                      logo_third: UploadFile | None = File(None), logo_fourth: UploadFile | None = File(None),
+                        logo_fifth: UploadFile | None = File(None), logo_sixth: UploadFile | None = File(None),
+                      remove_left: str = Form("0"), remove_right: str = Form("0"), remove_third: str = Form("0"),
+                        remove_fourth: str = Form("0"), remove_fifth: str = Form("0"), remove_sixth: str = Form("0")):
     blocked = wizard_gate("logos")
     if blocked:
         return blocked
     uploads, removals = logo_changes_from_form(
-        {"left": logo_left, "right": logo_right, "third": logo_third},
-        {"left": remove_left, "right": remove_right, "third": remove_third})
+        {"left": logo_left, "right": logo_right, "third": logo_third,
+         "fourth": logo_fourth, "fifth": logo_fifth, "sixth": logo_sixth},
+        {"left": remove_left, "right": remove_right, "third": remove_third,
+         "fourth": remove_fourth, "fifth": remove_fifth, "sixth": remove_sixth})
     already_there = {s for s, info in branding.logo_info(branding.load_settings()).items() if info["url"]}
     if not uploads and not (already_there - removals):
         return wizard_page(request, "logos", status_code=400,

@@ -7,7 +7,7 @@
 
 #define MyAppName "Barangay Queuing and Attendance Management System"
 ; Keep MyAppVersion the same as APP_VERSION in main.py
-#define MyAppVersion "2.0.0"
+#define MyAppVersion "2.1.0"
 #define MyAppPublisher "Soft-Tech Builders"
 #define MyAppExeName "Barangay_Attendance.exe"
 #define MyBuildDir "dist_attendance\Barangay_Attendance"

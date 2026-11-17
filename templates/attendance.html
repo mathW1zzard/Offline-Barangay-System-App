@@ -1,13 +1,16 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, badge, lane_tag, page_links %}
+{% from "_macros.html" import icon, badge, lane_tag, page_links, toast %}
 {% block title %}Attendance{% endblock %}
 {% block page_title %}Attendance{% endblock %}
 {% block page_subtitle %}History and logs{% endblock %}
 {% block description %}Saved ticket on Visit model{% endblock %}
+{% block toasts %}{{ toast(message) }}{% endblock %}
 {% block content %}
 {# One encoded query string, shared by the print link and the pagination links #}
 {% set qs = {'date_from': date_from, 'date_to': date_to, 'lane': lane, 'service_id': service_id or '', 'q':
 search}|urlencode %}
+{#- Correcting a record (v2.1.0): only for a role that may, and only the typed details -#}
+{% set may_edit = can(request, 'edit_attendance') %}
 
 <section class="list-section" aria-labelledby="attendance-title">
     <div class="section-head">
@@ -74,6 +77,7 @@ search}|urlencode %}
                     <th>Time in</th>
                     <th>Time out</th>
                     <th>Status</th>
+                    {% if may_edit %}<th>Actions</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -91,10 +95,21 @@ search}|urlencode %}
                     <td class="cell-num">{{ v.called_at.strftime('%I:%M %p') if v.called_at else '–' }}</td>
                     <td class="cell-num">{{ v.completed_at.strftime('%I:%M %p') if v.completed_at else '–' }}</td>
                     <td>{{ badge(v.final_status) }}</td>
+                    {% if may_edit %}
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline" data-edit-visit
+                            data-id="{{ v.id }}" data-ticket="{{ v.ticket_number }}"
+                            data-date="{{ v.created_at.strftime('%b %d, %Y') }}"
+                            data-name="{{ v.citizen_name }}" data-age="{{ v.age if v.age is not none else '' }}"
+                            data-address="{{ v.address or '' }}" data-service="{{ v.service_id or '' }}"
+                            data-service-name="{{ v.service_label }}"
+                            aria-label="Edit the record of ticket {{ v.ticket_number }}">{{ icon('pencil', 16) }} Edit</button>
+                    </td>
+                    {% endif %}
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8" class="empty-row">No visits match these filters. Try a wider date range or clear the search.</td>
+                    <td colspan="{{ 9 if may_edit else 8 }}" class="empty-row">No visits match these filters. Try a wider date range or clear the search.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -115,4 +130,123 @@ search}|urlencode %}
         </nav>
     </div>
 </section>
+{% endblock %}
+
+{% block dialogs %}
+{% set may_edit = can(request, 'edit_attendance') %}
+{% set qs = {'date_from': date_from, 'date_to': date_to, 'lane': lane, 'service_id': service_id or '', 'q': search}|urlencode %}
+{% if may_edit %}
+<!-- CORRECT A RECORD (v2.1.0). The ticket number, type, times and status are not here on purpose: they stay as recorded. -->
+<dialog class="modal" id="edit-visit-modal">
+    <form method="post" id="edit-visit-form" class="modal-body form">
+        <h2>Correct this record</h2>
+        <p class="modal-text">Ticket <strong id="ev-ticket"></strong>, <span id="ev-date"></span>. You can correct the
+            name, age, address and service. The ticket number, times and status stay as recorded. The correction is
+            written to the audit log.</p>
+        <input type="hidden" name="back" value="{{ qs }}&page={{ page }}">
+        <div class="form-row form-row-age">
+            <div class="field">
+                <label for="ev-name">Client name</label>
+                <input type="text" name="citizen_name" id="ev-name" maxlength="100" autocomplete="off" required
+                    aria-describedby="ev-name-blocked">
+                <p class="hint blocked-note" id="ev-name-blocked" aria-live="polite" hidden>Letters only (spaces and
+                    . - ' are fine). Numbers and symbols are left out.</p>
+            </div>
+            <div class="field">
+                <label for="ev-age">Age <span class="label-note">years</span></label>
+                <input type="text" name="age" id="ev-age" inputmode="numeric" pattern="[0-9]{1,3}" maxlength="3"
+                    autocomplete="off" title="Whole years, from 0 to {{ max_age }}" aria-describedby="ev-age-blocked">
+                <p class="hint blocked-note" id="ev-age-blocked" aria-live="polite" hidden>Numbers only.</p>
+            </div>
+        </div>
+        <div class="field">
+            <label for="ev-address">Address (Purok / Street)</label>
+            <input type="text" name="address" id="ev-address" maxlength="150" autocomplete="off">
+        </div>
+        <div class="field">
+            <label for="ev-service">Service</label>
+            <select name="service_id" id="ev-service">
+                {% for service in services if service.service_status == 'Active' %}
+                <option value="{{ service.id }}">{{ service.service_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-close>Cancel</button>
+            <button type="submit" class="btn btn-primary">{{ icon('check', 18) }} Save correction</button>
+        </div>
+    </form>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if can(request, 'edit_attendance') %}
+<script>
+    (() => {
+        const dialog = document.getElementById('edit-visit-modal');
+        const form = document.getElementById('edit-visit-form');
+        const nameBox = document.getElementById('ev-name');
+        const ageBox = document.getElementById('ev-age');
+        const addressBox = document.getElementById('ev-address');
+        const serviceBox = document.getElementById('ev-service');
+        const MAX_AGE = {{ max_age }};
+
+        // Open the dialog filled with the saved details of the row that was clicked
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-edit-visit]');
+            if (!btn) return;
+            const d = btn.dataset;
+            form.action = '/attendance/edit/' + d.id;
+            document.getElementById('ev-ticket').textContent = d.ticket;
+            document.getElementById('ev-date').textContent = d.date;
+            nameBox.value = d.name;
+            ageBox.value = d.age;
+            addressBox.value = d.address;
+            // A record saved before age and address were asked for may keep them empty
+            ageBox.required = d.age !== '';
+            addressBox.required = d.address !== '';
+            // The saved service stays selectable even if it was made inactive or removed since
+            serviceBox.querySelectorAll('option[data-saved-only]').forEach((o) => o.remove());
+            if (![...serviceBox.options].some((o) => o.value === d.service)) {
+                const kept = new Option(d.serviceName + ' (no longer offered)', d.service);
+                kept.dataset.savedOnly = '1';
+                serviceBox.add(kept, 0);
+            }
+            serviceBox.value = d.service;
+            nameBox.setCustomValidity('');
+            ageBox.setCustomValidity('');
+            dialog.showModal();
+            nameBox.focus();
+        });
+
+        // The same typing rules as Client Registration. The server checks again.
+        const keepOnly = (box, notAllowed, note) => {
+            let timer = null;
+            box.addEventListener('input', (e) => {
+                if (e.isComposing) return;
+                const cleaned = box.value.replace(notAllowed, '');
+                if (cleaned === box.value) return;
+                const caret = box.selectionStart - (box.value.length - cleaned.length);
+                box.value = cleaned;
+                box.setSelectionRange(Math.max(caret, 0), Math.max(caret, 0));
+                note.hidden = false;
+                clearTimeout(timer);
+                timer = setTimeout(() => { note.hidden = true; }, 4000);
+            });
+        };
+        keepOnly(nameBox, /[^\p{L}\p{M} .'\u2019-]/gu, document.getElementById('ev-name-blocked'));
+        keepOnly(ageBox, /\D/g, document.getElementById('ev-age-blocked'));
+        nameBox.addEventListener('input', () => {
+            nameBox.setCustomValidity(nameBox.value.trim() && !/\p{L}/u.test(nameBox.value)
+                ? 'Type the name with letters.' : '');
+        });
+        ageBox.addEventListener('input', () => {
+            const text = ageBox.value.trim();
+            ageBox.setCustomValidity(text && !(/^\d{1,3}$/.test(text) && Number(text) <= MAX_AGE)
+                ? 'Type the age in whole years, from 0 to ' + MAX_AGE + '.' : '');
+        });
+    })();
+</script>
+{% endif %}
 {% endblock %}

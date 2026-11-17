@@ -20,7 +20,7 @@ The secretary registers each walk-in visitor, prints a numbered slip, and calls 
 
 Screenshots use a made-up barangay and made-up residents.
 
-**Current version:** 2.0.0 (November 2026)
+**Current version:** 2.1.0 (November 2026)
 
 ## Why it matters
 
@@ -55,12 +55,12 @@ This system replaces that with:
 - Issued documents are kept exactly as printed: reprint, void and reissue, add an OR number later, and download the history as a list
 
 **Records**
-- Attendance history with date range, client type, service and name, ticket or address search
+- Attendance history with date range, client type, service and name, ticket or address search; a saved record's name, age, address or service can be corrected, with each correction in the audit log
 - Print view (with each client's address and age) and CSV export
 - Dashboard with today's totals and service volume
 
 **Setup and administration**
-- First-run wizard: barangay name, municipality and province, header lines and office colour, up to three logos, signatories and a test page
+- First-run wizard: barangay name, municipality and province, header lines and office colour, up to six logos (five or six go in one row above the header text), signatories and a test page
 - Settings page to change any of these later
 - Single administrator account with first-time setup, password change, and recovery key reset
 - Service directory (add, edit, remove) and an **audit log** of every action

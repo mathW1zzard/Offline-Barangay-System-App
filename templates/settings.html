@@ -205,6 +205,8 @@
         {{ error_message('logos') }}
         <p class="hint">Choose a picture to see it in the preview. Nothing is saved until you press Save logos.
             PNG or JPG, up to 2 MB. A phone photo is fine. Leave a slot empty to leave it out of the header.</p>
+        <p class="hint">You can add up to 6 logos. With 1 to 4 logos, they are printed beside the header text. With 5
+            or 6 logos, all of them are printed in one row above the header text.</p>
         <div class="logo-grid">
             {% for slot, info in logos.items() %}
             <div class="logo-slot" data-slot="{{ slot }}" data-saved-url="{{ info.url or '' }}">
@@ -374,6 +376,7 @@
                 });
                 $('.logo-empty', slot).hidden = Boolean(url);
             });
+            if (window.updateLogoLayout) window.updateLogoLayout();   // 5 or 6 logos sit above the text
             $$('.alert-error', form).forEach((a) => a.remove());   // an old error no longer applies
             delete form.dataset.dirty;
         }
